@@ -1,5 +1,6 @@
-notion-util
 functions_framework
 google-api-python-client
 google-cloud-firestore
-oauth2client 
+oauth2client
+requests
+httplib2

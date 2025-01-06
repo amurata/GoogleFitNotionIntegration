@@ -4,7 +4,7 @@ import json
 import datetime
 import httplib2
 import functions_framework
-from util import create_notion_page
+from util import create_notion_page, search_notion_page, update_notion_page
 from googleapiclient.discovery import build
 from google.cloud import firestore
 from oauth2client.client import GoogleCredentials
@@ -69,7 +69,8 @@ def handler(request):
 
         # NotionのデータベースIDと新しいページのタイトルを指定
         database_id = os.getenv("DATABASE_ID")
-        page_title = "Google Fit Data " + yesterday.strftime("%Y-%m-%d")
+        formatted_date = yesterday.strftime("%Y/%m/%d")
+        page_title = "Google Fit Data " + formatted_date
         # Notionのプロパティを動的に設定
         properties = {
             "移動距離 (km)": {
@@ -86,13 +87,22 @@ def handler(request):
             },
             "日付": {
                 "date": {
-                    "start": yesterday.isoformat()
+                    "start": formatted_date
                 }
             }
         }
-        # 新しいページを作成
-        print(properties)
-        res = create_notion_page(database_id, page_title, properties)
+
+        # 同じ日付のページを検索
+        existing_page = search_notion_page(database_id, formatted_date)
+
+        if existing_page:
+            # 既存のページが見つかった場合は更新
+            print(f"Updating existing page for date: {formatted_date}")
+            res = update_notion_page(existing_page["id"], properties)
+        else:
+            # 新しいページを作成
+            print(f"Creating new page for date: {formatted_date}")
+            res = create_notion_page(database_id, page_title, properties)
 
         return {"status": "success", "message": "Data successfully processed"}
     except Exception as e:

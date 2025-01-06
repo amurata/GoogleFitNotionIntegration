@@ -60,26 +60,28 @@ def handler(request):
 
         dataset = fitness_service.users().dataset().aggregate(userId="me", body=request_body).execute()
         bucket = dataset.get("bucket")[0]
-        distance = sum([point['value'][0]['fpVal'] for point in bucket.get("dataset")[0]['point']])
+        # メートルからキロメートルに変換し、小数点1桁に丸める
+        distance = round(sum([point['value'][0]['fpVal'] for point in bucket.get("dataset")[0]['point']]) / 1000, 1)
         steps = sum([point['value'][0]['intVal'] for point in bucket.get("dataset")[1]['point']])
-        calories = sum([point['value'][0]['fpVal'] for point in bucket.get("dataset")[2]['point']])
-        active_minutes = sum([point['value'][0]['fpVal'] for point in bucket.get("dataset")[3]['point']])
+        # 小数点1桁に丸める
+        calories = round(sum([point['value'][0]['fpVal'] for point in bucket.get("dataset")[2]['point']]), 1)
+        active_minutes = int(sum([point['value'][0]['fpVal'] for point in bucket.get("dataset")[3]['point']]))
 
         # NotionのデータベースIDと新しいページのタイトルを指定
         database_id = os.getenv("DATABASE_ID")
         page_title = "Google Fit Data " + yesterday.strftime("%Y-%m-%d")
         # Notionのプロパティを動的に設定
         properties = {
-            "移動距離": {
+            "移動距離 (km)": {
                 "number": distance
             },
-            "歩数": {
+            "歩数 (歩)": {
                 "number": steps
             },
-            "消費カロリー": {
+            "消費カロリー (kcal)": {
                 "number": calories
             },
-            "強めの運動": {
+            "強めの運動 (分)": {
                 "number": active_minutes
             },
             "日付": {

@@ -70,11 +70,23 @@ def handler(request):
         page_title = "Google Fit Data " + yesterday.strftime("%Y-%m-%d")
         # Notionのプロパティを動的に設定
         properties = {
-            "移動距離": {"number": distance},
-            "歩数": {"number": steps},
-            "消費カロリー": {"number": calories},
-            "強めの運動": {"number": active_minutes},
-            "日付": {"date": {"start": yesterday.isoformat()}}
+            "移動距離": {
+                "number": distance
+            },
+            "歩数": {
+                "number": steps
+            },
+            "消費カロリー": {
+                "number": calories
+            },
+            "強めの運動": {
+                "number": active_minutes
+            },
+            "日付": {
+                "date": {
+                    "start": yesterday.isoformat()
+                }
+            }
         }
         # 新しいページを作成
         print(properties)

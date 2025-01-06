@@ -20,7 +20,7 @@ def create_notion_page(database_id, title, properties):
     data = {
         "parent": {"database_id": database_id},
         "properties": {
-            "Name": {
+            "title": {
                 "title": [
                     {
                         "text": {
@@ -33,6 +33,9 @@ def create_notion_page(database_id, title, properties):
         }
     }
 
+    print(f"Request data: {properties}")  # Cloud Run用のログ形式
     response = requests.post(url, headers=headers, json=data)
+    if not response.ok:
+        print(f"Notion API error: {response.status_code} - {response.text}")  # エラー情報をログに出力
     response.raise_for_status()
     return response.json()

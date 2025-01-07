@@ -9,6 +9,16 @@ from google.cloud import firestore
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 
+OAUTH_SCOPE = [
+    "https://www.googleapis.com/auth/fitness.activity.read",
+    "https://www.googleapis.com/auth/fitness.body.read",
+    "https://www.googleapis.com/auth/fitness.heart_rate.read",
+    "https://www.googleapis.com/auth/fitness.location.read",
+    "https://www.googleapis.com/auth/fitness.nutrition.read",
+    "https://www.googleapis.com/auth/fitness.oxygen_saturation.read",
+    "https://www.googleapis.com/auth/fitness.sleep.read",
+]
+
 @functions_framework.http
 def handler(request):
     try:
@@ -18,14 +28,22 @@ def handler(request):
         doc = doc_ref.get()
         if doc.exists:
             cred_dict = doc.to_dict()
-            credentials = Credentials(
-                token=cred_dict['token'],
-                refresh_token=cred_dict['refresh_token'],
-                token_uri=cred_dict['token_uri'],
-                client_id=cred_dict['client_id'],
-                client_secret=cred_dict['client_secret'],
-                scopes=cred_dict['scopes']
-            )
+            try:
+                # 新しい形式での認証情報の取得を試みる
+                credentials = Credentials(
+                    token=cred_dict['token'],
+                    refresh_token=cred_dict['refresh_token'],
+                    token_uri=cred_dict['token_uri'],
+                    client_id=cred_dict['client_id'],
+                    client_secret=cred_dict['client_secret'],
+                    scopes=cred_dict['scopes']
+                )
+            except KeyError:
+                # 古い形式の認証情報の場合
+                credentials = Credentials.from_authorized_user_info(
+                    json.loads(cred_dict['token_info']),
+                    OAUTH_SCOPE
+                )
         else:
             raise ValueError("Firestoreに認証情報が存在しません。")
 

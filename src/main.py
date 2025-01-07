@@ -2,12 +2,12 @@ import os
 import time
 import json
 import datetime
-import httplib2
 import functions_framework
 from util import create_notion_page, search_notion_page, update_notion_page
 from googleapiclient.discovery import build
 from google.cloud import firestore
-from oauth2client.client import GoogleCredentials
+from google.oauth2.credentials import Credentials
+from google.auth.transport.requests import Request
 
 @functions_framework.http
 def handler(request):
@@ -17,19 +17,34 @@ def handler(request):
         doc_ref = db.collection(u'credentials').document(u'google_fit')
         doc = doc_ref.get()
         if doc.exists:
-            credentials_dict = doc.to_dict()
-            credentials = GoogleCredentials.from_json(json.dumps(credentials_dict))
+            cred_dict = doc.to_dict()
+            credentials = Credentials(
+                token=cred_dict['token'],
+                refresh_token=cred_dict['refresh_token'],
+                token_uri=cred_dict['token_uri'],
+                client_id=cred_dict['client_id'],
+                client_secret=cred_dict['client_secret'],
+                scopes=cred_dict['scopes']
+            )
         else:
             raise ValueError("Firestoreに認証情報が存在しません。")
 
-        http = credentials.authorize(httplib2.Http())
-        credentials.refresh(http)  # 認証トークンを更新する。
+        # 必要に応じてトークンを更新
+        if credentials.expired and credentials.refresh_token:
+            credentials.refresh(Request())
+            # 更新された認証情報をFirestoreに保存
+            updated_cred_dict = {
+                'token': credentials.token,
+                'refresh_token': credentials.refresh_token,
+                'token_uri': credentials.token_uri,
+                'client_id': credentials.client_id,
+                'client_secret': credentials.client_secret,
+                'scopes': credentials.scopes,
+                'updated_at': firestore.SERVER_TIMESTAMP
+            }
+            doc_ref.set(updated_cred_dict)
 
-        # 更新された認証情報をFirestoreに保存
-        updated_credentials_dict = json.loads(credentials.to_json())
-        doc_ref.set(updated_credentials_dict)
-
-        fitness_service = build("fitness", "v1", http=http)
+        fitness_service = build("fitness", "v1", credentials=credentials)
         # Google Fitから昨日の歩数データを取得
         yesterday = datetime.datetime.now().date() - datetime.timedelta(days=1)
         start_time = datetime.datetime.combine(yesterday, datetime.time.min)

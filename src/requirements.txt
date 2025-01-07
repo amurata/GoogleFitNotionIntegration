@@ -1,6 +1,6 @@
 functions_framework
 google-api-python-client
 google-cloud-firestore
-oauth2client
+google-auth-oauthlib
 requests
 httplib2

@@ -1,8 +1,5 @@
-import argparse
-import os
-import json
 from google.cloud import firestore
-from oauth2client.client import flow_from_clientsecrets
+from google_auth_oauthlib.flow import InstalledAppFlow
 
 OAUTH_SCOPE = [
     "https://www.googleapis.com/auth/fitness.activity.read",
@@ -15,28 +12,32 @@ OAUTH_SCOPE = [
 ]
 
 def oauth2():
-    """取得した認証情報をFirestoreに格納し、GoogleFitAPIのアクセスに必要なトークンを発行する。
-    """
-    flow = flow_from_clientsecrets(
-        # API有効化時に取得したOAuth用のJSONファイルを指定
+    """PKCEを使用した安全な認証フローでGoogleFit APIのアクセストークンを取得"""
+    flow = InstalledAppFlow.from_client_secrets_file(
         "./key.json",
-        # スコープを指定
-        scope=OAUTH_SCOPE,
-        # ユーザーの認証後の、トークン受け取り方法を指定
-        redirect_uri="urn:ietf:wg:oauth:2.0:oob",
+        scopes=OAUTH_SCOPE,
+        # PKCEはInstalledAppFlowで自動的に有効化される
     )
 
-    authorize_url = flow.step1_get_authorize_url()
-    print("下記URLをブラウザで起動してください。")
-    print(authorize_url)
+    credentials = flow.run_local_server(port=0)
 
-    code = input("Codeを入力してください: ").strip()
-    credentials = flow.step2_exchange(code)
-
-    # Firestoreに認証情報を格納
+    # 認証情報を安全に保存
     db = firestore.Client()
     doc_ref = db.collection(u'credentials').document(u'google_fit')
-    doc_ref.set(json.loads(credentials.to_json()))
 
-oauth2()
+    encrypted_credentials = {
+        'token': credentials.token,
+        'refresh_token': credentials.refresh_token,
+        'token_uri': credentials.token_uri,
+        'client_id': credentials.client_id,
+        'client_secret': credentials.client_secret,
+        'scopes': credentials.scopes,
+        'created_at': firestore.SERVER_TIMESTAMP,
+        'updated_at': firestore.SERVER_TIMESTAMP
+    }
 
+    doc_ref.set(encrypted_credentials)
+    print("認証が完了し、認証情報が安全に保存されました。")
+
+if __name__ == "__main__":
+    oauth2()

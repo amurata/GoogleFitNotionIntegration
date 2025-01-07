@@ -45,13 +45,15 @@ def handler(request):
             doc_ref.set(updated_cred_dict)
 
         fitness_service = build("fitness", "v1", credentials=credentials)
-        # Google Fitから昨日の歩数データを取得
+        # Google Fitから昨日のデータを取得
         yesterday = datetime.datetime.now().date() - datetime.timedelta(days=1)
         start_time = datetime.datetime.combine(yesterday, datetime.time.min)
         end_time = datetime.datetime.combine(yesterday, datetime.time.max)
         start_unix_time_millis = int(time.mktime(start_time.timetuple()) * 1000)
         end_unix_time_millis = int(time.mktime(end_time.timetuple()) * 1000)
-        request_body = {
+
+        # アクティビティデータの取得
+        activity_request_body = {
             "aggregateBy": [
                 {
                     "dataTypeName": "com.google.distance.delta",  # 移動距離
@@ -65,6 +67,15 @@ def handler(request):
                 {
                     "dataTypeName": "com.google.heart_minutes",  # 強めの運動
                 },
+                {
+                    "dataTypeName": "com.google.heart_rate.bpm",  # 心拍数
+                },
+                {
+                    "dataTypeName": "com.google.oxygen_saturation",  # 酸素飽和度
+                },
+                {
+                    "dataTypeName": "com.google.weight",  # 体重
+                }
             ],
             "bucketByTime": {
                 "durationMillis": end_unix_time_millis - start_unix_time_millis
@@ -73,19 +84,45 @@ def handler(request):
             "endTimeMillis": end_unix_time_millis,
         }
 
-        dataset = fitness_service.users().dataset().aggregate(userId="me", body=request_body).execute()
+        dataset = fitness_service.users().dataset().aggregate(userId="me", body=activity_request_body).execute()
         bucket = dataset.get("bucket")[0]
-        # メートルからキロメートルに変換し、小数点1桁に丸める
+
+        # 基本データの取得
         distance = round(sum([point['value'][0]['fpVal'] for point in bucket.get("dataset")[0]['point']]) / 1000, 1)
         steps = sum([point['value'][0]['intVal'] for point in bucket.get("dataset")[1]['point']])
-        # 小数点1桁に丸める
         calories = round(sum([point['value'][0]['fpVal'] for point in bucket.get("dataset")[2]['point']]), 1)
         active_minutes = int(sum([point['value'][0]['fpVal'] for point in bucket.get("dataset")[3]['point']]))
+
+        # 追加データの取得
+        heart_rate_data = bucket.get("dataset")[4].get('point', [])
+        avg_heart_rate = round(sum([point['value'][0]['fpVal'] for point in heart_rate_data]) / len(heart_rate_data), 1) if heart_rate_data else 0
+
+        oxygen_data = bucket.get("dataset")[5].get('point', [])
+        avg_oxygen = round(sum([point['value'][0]['fpVal'] for point in oxygen_data]) / len(oxygen_data), 1) if oxygen_data else 0
+
+        weight_data = bucket.get("dataset")[6].get('point', [])
+        latest_weight = round(weight_data[-1]['value'][0]['fpVal'], 1) if weight_data else 0
+
+        # 睡眠データの取得（セッションAPI使用）
+        sleep_request = fitness_service.users().sessions().list(
+            userId="me",
+            startTime=start_time.isoformat() + "Z",
+            endTime=end_time.isoformat() + "Z",
+            activityType=72  # SLEEP
+        ).execute()
+
+        total_sleep_minutes = 0
+        if 'session' in sleep_request:
+            for session in sleep_request['session']:
+                start = int(session['startTimeMillis'])
+                end = int(session['endTimeMillis'])
+                total_sleep_minutes += (end - start) // (1000 * 60)
 
         # NotionのデータベースIDと新しいページのタイトルを指定
         database_id = os.getenv("DATABASE_ID")
         formatted_date = yesterday.strftime("%Y/%m/%d")
         page_title = "Google Fit Data " + formatted_date
+
         # Notionのプロパティを動的に設定
         properties = {
             "移動距離 (km)": {
@@ -99,6 +136,18 @@ def handler(request):
             },
             "強めの運動 (分)": {
                 "number": active_minutes
+            },
+            "平均心拍数 (bpm)": {
+                "number": avg_heart_rate
+            },
+            "酸素飽和度 (%)": {
+                "number": avg_oxygen
+            },
+            "体重 (kg)": {
+                "number": latest_weight if latest_weight > 0 else None
+            },
+            "睡眠時間 (分)": {
+                "number": total_sleep_minutes
             },
             "日付": {
                 "date": {

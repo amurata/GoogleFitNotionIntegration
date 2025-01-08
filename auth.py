@@ -1,15 +1,6 @@
 from google.cloud import firestore
 from google_auth_oauthlib.flow import InstalledAppFlow
-
-OAUTH_SCOPE = [
-    "https://www.googleapis.com/auth/fitness.activity.read",
-    "https://www.googleapis.com/auth/fitness.body.read",
-    "https://www.googleapis.com/auth/fitness.heart_rate.read",
-    "https://www.googleapis.com/auth/fitness.location.read",
-    "https://www.googleapis.com/auth/fitness.nutrition.read",
-    "https://www.googleapis.com/auth/fitness.oxygen_saturation.read",
-    "https://www.googleapis.com/auth/fitness.sleep.read",
-]
+from constants import OAUTH_SCOPE
 
 def oauth2():
     """PKCEを使用した安全な認証フローでGoogleFit APIのアクセストークンを取得"""

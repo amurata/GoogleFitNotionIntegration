@@ -8,16 +8,7 @@ from googleapiclient.discovery import build
 from google.cloud import firestore
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
-
-OAUTH_SCOPE = [
-    "https://www.googleapis.com/auth/fitness.activity.read",
-    "https://www.googleapis.com/auth/fitness.body.read",
-    "https://www.googleapis.com/auth/fitness.heart_rate.read",
-    "https://www.googleapis.com/auth/fitness.location.read",
-    "https://www.googleapis.com/auth/fitness.nutrition.read",
-    "https://www.googleapis.com/auth/fitness.oxygen_saturation.read",
-    "https://www.googleapis.com/auth/fitness.sleep.read",
-]
+from constants import OAUTH_SCOPE, DATA_TYPES, ACTIVITY_TYPES
 
 @functions_framework.http
 def handler(request):
@@ -73,27 +64,13 @@ def handler(request):
         # アクティビティデータの取得
         activity_request_body = {
             "aggregateBy": [
-                {
-                    "dataTypeName": "com.google.distance.delta",  # 移動距離
-                },
-                {
-                    "dataTypeName": "com.google.step_count.delta",  # 歩数
-                },
-                {
-                    "dataTypeName": "com.google.calories.expended",  # 消費カロリー
-                },
-                {
-                    "dataTypeName": "com.google.heart_minutes",  # 強めの運動
-                },
-                {
-                    "dataTypeName": "com.google.heart_rate.bpm",  # 心拍数
-                },
-                {
-                    "dataTypeName": "com.google.oxygen_saturation",  # 酸素飽和度
-                },
-                {
-                    "dataTypeName": "com.google.weight",  # 体重
-                }
+                {"dataTypeName": DATA_TYPES["distance"]},
+                {"dataTypeName": DATA_TYPES["steps"]},
+                {"dataTypeName": DATA_TYPES["calories"]},
+                {"dataTypeName": DATA_TYPES["active_minutes"]},
+                {"dataTypeName": DATA_TYPES["heart_rate"]},
+                {"dataTypeName": DATA_TYPES["oxygen"]},
+                {"dataTypeName": DATA_TYPES["weight"]},
             ],
             "bucketByTime": {
                 "durationMillis": end_unix_time_millis - start_unix_time_millis
@@ -126,7 +103,7 @@ def handler(request):
             userId="me",
             startTime=start_time.isoformat() + "Z",
             endTime=end_time.isoformat() + "Z",
-            activityType=72  # SLEEP
+            activityType=ACTIVITY_TYPES["sleep"]
         ).execute()
 
         total_sleep_minutes = 0

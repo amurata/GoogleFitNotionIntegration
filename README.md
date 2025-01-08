@@ -65,6 +65,12 @@ export GCP_PROJECT=xxxxxxx
 ./deploy.sh  # Cloud Functionsへのデプロイ
 ```
 
+### 5. トリガーする
+Pub/Subトピック "fit" にメッセージを送信してCloud Functionsをトリガーする
+```bash
+./trigger_fit.sh
+```
+
 ## 使用しているAPIスコープ
 - fitness.activity.read: アクティビティデータの取得
 - fitness.body.read: 体重データの取得

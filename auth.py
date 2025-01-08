@@ -2,6 +2,9 @@ from google.cloud import firestore
 from google_auth_oauthlib.flow import InstalledAppFlow
 from constants import OAUTH_SCOPE
 
+# 認証情報を取得するためには、以下のコマンドを実行する必要がある
+# PYTHONPATH=src python auth.py
+
 def oauth2():
     """PKCEを使用した安全な認証フローでGoogleFit APIのアクセストークンを取得"""
     flow = InstalledAppFlow.from_client_secrets_file(

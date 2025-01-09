@@ -5,6 +5,7 @@ OAUTH_SCOPE = [
     "https://www.googleapis.com/auth/fitness.heart_rate.read", # 心拍数
     "https://www.googleapis.com/auth/fitness.oxygen_saturation.read", # 酸素飽和度
     "https://www.googleapis.com/auth/fitness.sleep.read",     # 睡眠データ
+    "https://www.googleapis.com/auth/fitness.location.read",  # 位置情報（距離計算に必要）
 ]
 
 # Google Fit Data Types

@@ -16,16 +16,13 @@ if not GCP_PROJECT:
 @functions_framework.http
 def webhook_handler(request):
     """
-    Webhookリクエストを受け取り、Pub/Subメッセージを発行する
+    NotionのWebhookリクエストを受け取り、Pub/Subメッセージを発行する
 
     Args:
         request: Cloud Functions request object
 
     Returns:
         dict: Response with status and message
-
-    Raises:
-        ValueError: Invalid request parameters
     """
     try:
         # リクエストメソッドの確認
@@ -37,28 +34,29 @@ def webhook_handler(request):
 
         # APIキーの検証
         api_key = request.headers.get("X-API-Key")
-        if not api_key:
-            print("Error: Missing API key")
-            return {
-                "status": "error",
-                "message": "Missing API key"
-            }, 401
-
-        if api_key != WEBHOOK_API_KEY:
+        if not api_key or api_key != WEBHOOK_API_KEY:
             print("Error: Invalid API key")
             return {
                 "status": "error",
-                "message": "Invalid API key"
+                "message": "Unauthorized"
             }, 401
 
-        # クエリパラメータからモードを取得（today or yesterday）
-        mode = request.args.get("mode", "yesterday")
-        if mode not in ["today", "yesterday"]:
-            print(f"Error: Invalid mode: {mode}")
+        # リクエストボディの取得
+        try:
+            request_json = request.get_json()
+        except Exception:
+            print("Error: Invalid JSON")
             return {
                 "status": "error",
-                "message": "Invalid mode. Must be 'today' or 'yesterday'"
+                "message": "Invalid JSON payload"
             }, 400
+
+        # プロパティの取得
+        properties = request_json.get('properties', {})
+
+        # ボタンのプロパティから取得モードを判断
+        # デフォルトは today とする
+        mode = "today"
 
         # Pub/Subクライアントの初期化
         publisher = pubsub_v1.PublisherClient()
@@ -96,3 +94,7 @@ def webhook_handler(request):
             "status": "error",
             "message": "Internal server error"
         }, 500
+
+if __name__ == "__main__":
+    # ローカルでのテスト用
+    functions_framework.start()

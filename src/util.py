@@ -1,6 +1,13 @@
 import os
 import requests
 from datetime import datetime
+from googleapiclient.discovery import build
+from google.oauth2.credentials import Credentials
+from google.auth.transport.requests import Request
+from google.cloud import firestore
+import time
+import json
+from constants import OAUTH_SCOPE, DATA_TYPES, ACTIVITY_TYPES
 
 def convert_date_format(date_str, to_iso=True):
     """
@@ -126,3 +133,69 @@ def create_notion_page(database_id, title, properties):
         print(f"Notion API error: {response.status_code} - {response.text}")
     response.raise_for_status()
     return response.json()
+
+def get_google_fit_data(credentials, date):
+    fitness_service = build("fitness", "v1", credentials=credentials)
+    start_time = datetime.datetime.combine(date, datetime.time.min)
+    end_time = datetime.datetime.combine(date, datetime.time.max)
+    start_unix_time_millis = int(time.mktime(start_time.timetuple()) * 1000)
+    end_unix_time_millis = int(time.mktime(end_time.timetuple()) * 1000)
+
+    activity_request_body = {
+        "aggregateBy": [
+            {"dataTypeName": DATA_TYPES["distance"]},
+            {"dataTypeName": DATA_TYPES["steps"]},
+            {"dataTypeName": DATA_TYPES["calories"]},
+            {"dataTypeName": DATA_TYPES["active_minutes"]},
+            {"dataTypeName": DATA_TYPES["heart_rate"]},
+            {"dataTypeName": DATA_TYPES["oxygen"]},
+            {"dataTypeName": DATA_TYPES["weight"]},
+        ],
+        "bucketByTime": {
+            "durationMillis": end_unix_time_millis - start_unix_time_millis
+        },
+        "startTimeMillis": start_unix_time_millis,
+        "endTimeMillis": end_unix_time_millis,
+    }
+
+    dataset = fitness_service.users().dataset().aggregate(userId="me", body=activity_request_body).execute()
+    bucket = dataset.get("bucket")[0]
+
+    distance = round(sum([point['value'][0]['fpVal'] for point in bucket.get("dataset")[0]['point']]) / 1000, 1)
+    steps = sum([point['value'][0]['intVal'] for point in bucket.get("dataset")[1]['point']])
+    calories = round(sum([point['value'][0]['fpVal'] for point in bucket.get("dataset")[2]['point']]), 1)
+    active_minutes = int(sum([point['value'][0]['fpVal'] for point in bucket.get("dataset")[3]['point']]))
+
+    heart_rate_data = bucket.get("dataset")[4].get('point', [])
+    avg_heart_rate = round(sum([point['value'][0]['fpVal'] for point in heart_rate_data]) / len(heart_rate_data), 1) if heart_rate_data else 0
+
+    oxygen_data = bucket.get("dataset")[5].get('point', [])
+    avg_oxygen = round(sum([point['value'][0]['fpVal'] for point in oxygen_data]) / len(oxygen_data), 1) if oxygen_data else 0
+
+    weight_data = bucket.get("dataset")[6].get('point', [])
+    latest_weight = round(weight_data[-1]['value'][0]['fpVal'], 1) if weight_data else 0
+
+    sleep_request = fitness_service.users().sessions().list(
+        userId="me",
+        startTime=start_time.isoformat() + "Z",
+        endTime=end_time.isoformat() + "Z",
+        activityType=ACTIVITY_TYPES["sleep"]
+    ).execute()
+
+    total_sleep_minutes = 0
+    if 'session' in sleep_request:
+        for session in sleep_request['session']:
+            start = int(session['startTimeMillis'])
+            end = int(session['endTimeMillis'])
+            total_sleep_minutes += (end - start) // (1000 * 60)
+
+    return {
+        "distance": distance,
+        "steps": steps,
+        "calories": calories,
+        "active_minutes": active_minutes,
+        "avg_heart_rate": avg_heart_rate,
+        "avg_oxygen": avg_oxygen,
+        "latest_weight": latest_weight,
+        "total_sleep_minutes": total_sleep_minutes
+    }

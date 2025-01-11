@@ -19,6 +19,9 @@ def webhook_handler(request):
     """
     NotionのWebhookリクエストを受け取り、Pub/Subメッセージを発行する
     """
+    print("Received request:", request.method)
+    print("Headers:", dict(request.headers))
+
     # ヘルスチェック用のGETリクエスト対応
     if request.method == 'GET':
         return {
@@ -38,6 +41,8 @@ def webhook_handler(request):
         api_key = request.headers.get("X-API-Key")
         if not api_key or api_key != WEBHOOK_API_KEY:
             print("Error: Invalid API key")
+            print("Received:", api_key)
+            print("Expected:", WEBHOOK_API_KEY)
             return {
                 "status": "error",
                 "message": "Unauthorized"
@@ -46,8 +51,10 @@ def webhook_handler(request):
         # リクエストボディの取得
         try:
             request_json = request.get_json()
-        except Exception:
-            print("Error: Invalid JSON")
+            print("Request body:", json.dumps(request_json, indent=2))
+        except Exception as e:
+            print("Error parsing JSON:", str(e))
+            print("Raw request data:", request.get_data())
             return {
                 "status": "error",
                 "message": "Invalid JSON payload"
@@ -57,7 +64,11 @@ def webhook_handler(request):
         properties = request_json.get('properties', {})
         page_id = request_json.get('pageId')
 
+        print("Properties:", json.dumps(properties, indent=2))
+        print("Page ID:", page_id)
+
         if not page_id:
+            print("Page ID not found in request")
             return {
                 "status": "error",
                 "message": "Page ID is required"
@@ -66,10 +77,13 @@ def webhook_handler(request):
         # 日付プロパティの取得
         date_prop = properties.get('日付', {}).get('date', {}).get('start')
         if not date_prop:
+            print("Date property not found in:", properties)
             return {
                 "status": "error",
                 "message": "Date property is required"
             }, 400
+
+        print("Date property:", date_prop)
 
         # 日付文字列をdatetimeオブジェクトに変換
         try:
@@ -78,10 +92,13 @@ def webhook_handler(request):
             try:
                 target_date = datetime.datetime.strptime(date_prop, "%Y/%m/%d").date()
             except ValueError:
+                print("Invalid date format:", date_prop)
                 return {
                     "status": "error",
                     "message": "Invalid date format"
                 }, 400
+
+        print("Target date:", target_date)
 
         # Firestoreから認証情報を取得
         try:
@@ -121,11 +138,14 @@ def webhook_handler(request):
                 doc_ref.set(updated_cred_dict)
 
             # Google Fitからデータを取得
+            print("Fetching Google Fit data for date:", target_date)
             fit_data = get_google_fit_data(credentials, target_date)
+            print("Retrieved Google Fit data:", json.dumps(fit_data, indent=2))
 
             # Notionのプロパティを更新
             database_id = os.getenv("DATABASE_ID")
             formatted_date = target_date.strftime("%Y/%m/%d")
+            print("Formatted date:", formatted_date)
 
             properties = {
                 "移動距離 (km)": {"number": fit_data["distance"]},
@@ -139,8 +159,12 @@ def webhook_handler(request):
                 "日付": {"date": {"start": formatted_date}}
             }
 
+            print("Updating Notion properties:", json.dumps(properties, indent=2))
+
             # ページを更新
+            print("Updating Notion page:", page_id)
             res = update_notion_page(page_id, properties)
+            print("Notion API response:", json.dumps(res, indent=2))
 
             return {
                 "status": "success",

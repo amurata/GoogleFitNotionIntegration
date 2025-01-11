@@ -21,9 +21,10 @@ gcloud functions deploy GoogleFitWebhook \
     --trigger-http \
     --region=asia-northeast1 \
     --entry-point=webhook_handler \
-    --timeout=30 \
-    --memory=128Mi \
-    --set-env-vars=WEBHOOK_API_KEY=${WEBHOOK_API_KEY},GCP_PROJECT=${GCP_PROJECT},PORT=8080 \
+    --timeout=540 \
+    --memory=256Mi \
+    --min-instances=1 \
+    --set-env-vars=WEBHOOK_API_KEY=${WEBHOOK_API_KEY},GCP_PROJECT=${GCP_PROJECT} \
     --source=./src \
     --project=${GCP_PROJECT} \
     --allow-unauthenticated

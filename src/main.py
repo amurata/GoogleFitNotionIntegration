@@ -38,14 +38,22 @@ def webhook_handler(request):
             }, 405
 
         # APIキーの検証
-        api_key = request.headers.get("X-API-Key")
+        api_key = request.headers.get("X-API-Key") or request.headers.get("x-api-key")
+        print("All headers:", dict(request.headers))
+        print("API Key from headers:", api_key)
+        print("Expected API Key:", WEBHOOK_API_KEY)
+
         if not api_key or api_key != WEBHOOK_API_KEY:
             print("Error: Invalid API key")
             print("Received:", api_key)
             print("Expected:", WEBHOOK_API_KEY)
             return {
                 "status": "error",
-                "message": "Unauthorized"
+                "message": "Unauthorized",
+                "details": {
+                    "received_key": api_key,
+                    "expected_key": WEBHOOK_API_KEY
+                }
             }, 401
 
         # リクエストボディの取得

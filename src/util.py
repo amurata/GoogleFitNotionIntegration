@@ -1,6 +1,6 @@
 import os
 import requests
-from datetime import datetime
+from datetime import datetime, time as dt_time
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
@@ -136,8 +136,8 @@ def create_notion_page(database_id, title, properties):
 
 def get_google_fit_data(credentials, date):
     fitness_service = build("fitness", "v1", credentials=credentials)
-    start_time = datetime.datetime.combine(date, datetime.time.min)
-    end_time = datetime.datetime.combine(date, datetime.time.max)
+    start_time = datetime.combine(date, dt_time.min)
+    end_time = datetime.combine(date, dt_time.max)
     start_unix_time_millis = int(time.mktime(start_time.timetuple()) * 1000)
     end_unix_time_millis = int(time.mktime(end_time.timetuple()) * 1000)
 

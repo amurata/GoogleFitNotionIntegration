@@ -197,57 +197,30 @@ def webhook_handler(request):
             "message": "Internal server error"
         }, 500
 
-@functions_framework.cloud_event
-def handler(cloud_event):
-    """
-    Pub/Subメッセージを処理するハンドラー
-    """
-    try:
-        import base64
-
-        # メッセージデータを取得
-        message = base64.b64decode(cloud_event.data["message"]["data"]).decode()
-        print(f"Received message: {message}")
-
-        if message == "trigger":
-            # 通常の自動処理
-            return process_yesterday_data()
-        else:
-            try:
-                # 日付指定の処理
-                target_date = datetime.strptime(message, '%Y-%m-%d').date()
-                return process_data_for_date(target_date)
-            except ValueError:
-                print(f"Invalid date format: {message}")
-                return process_yesterday_data()
-
-    except Exception as e:
-        print(f"Error: {str(e)}")
-        return {"status": "error", "message": str(e)}, 500
-
-def process_yesterday_data():
+def get_credentials():
+    """Firestoreから認証情報を取得し、必要に応じて更新する"""
     try:
         db = firestore.Client()
         doc_ref = db.collection(u'credentials').document(u'google_fit')
         doc = doc_ref.get()
-        if doc.exists:
-            cred_dict = doc.to_dict()
-            try:
-                credentials = Credentials(
-                    token=cred_dict['token'],
-                    refresh_token=cred_dict['refresh_token'],
-                    token_uri=cred_dict['token_uri'],
-                    client_id=cred_dict['client_id'],
-                    client_secret=cred_dict['client_secret'],
-                    scopes=cred_dict['scopes']
-                )
-            except KeyError:
-                credentials = Credentials.from_authorized_user_info(
-                    json.loads(cred_dict['token_info']),
-                    OAUTH_SCOPE
-                )
-        else:
+        if not doc.exists:
             raise ValueError("Firestoreに認証情報が存在しません。")
+
+        cred_dict = doc.to_dict()
+        try:
+            credentials = Credentials(
+                token=cred_dict['token'],
+                refresh_token=cred_dict['refresh_token'],
+                token_uri=cred_dict['token_uri'],
+                client_id=cred_dict['client_id'],
+                client_secret=cred_dict['client_secret'],
+                scopes=cred_dict['scopes']
+            )
+        except KeyError:
+            credentials = Credentials.from_authorized_user_info(
+                json.loads(cred_dict['token_info']),
+                OAUTH_SCOPE
+            )
 
         if credentials.expired and credentials.refresh_token:
             credentials.refresh(Request())
@@ -262,149 +235,15 @@ def process_yesterday_data():
             }
             doc_ref.set(updated_cred_dict)
 
-        yesterday = (datetime.now() - timedelta(days=1)).date()
-        fit_data = get_google_fit_data(credentials, yesterday)
-
-        database_id = os.getenv("DATABASE_ID")
-        formatted_date = yesterday.strftime("%Y/%m/%d")
-        page_title = "Google Fit Data " + formatted_date
-
-        properties = {
-            "移動距離 (km)": {"number": fit_data["distance"]},
-            "歩数 (歩)": {"number": fit_data["steps"]},
-            "消費カロリー (kcal)": {"number": fit_data["calories"]},
-            "強めの運動 (分)": {"number": fit_data["active_minutes"]},
-            "平均心拍数 (bpm)": {"number": fit_data["avg_heart_rate"]},
-            "酸素飽和度 (%)": {"number": fit_data["avg_oxygen"]},
-            "体重 (kg)": {"number": fit_data["latest_weight"] if fit_data["latest_weight"] > 0 else None},
-            "睡眠時間 (分)": {"number": fit_data["total_sleep_minutes"]},
-            "日付": {"date": {"start": formatted_date}}
-        }
-
-        existing_page = search_notion_page(database_id, formatted_date)
-
-        if existing_page:
-            print(f"Updating existing page for date: {formatted_date}")
-            res = update_notion_page(existing_page["id"], properties)
-        else:
-            print(f"Creating new page for date: {formatted_date}")
-            res = create_notion_page(database_id, page_title, properties)
-
-        return {"status": "success", "message": "Yesterday's data successfully processed"}
+        return credentials
     except Exception as e:
-        print(f"Error: {str(e)}")
-        return {"status": "error", "message": str(e)}, 500
-
-def trigger_today():
-    try:
-        db = firestore.Client()
-        doc_ref = db.collection(u'credentials').document(u'google_fit')
-        doc = doc_ref.get()
-        if doc.exists:
-            cred_dict = doc.to_dict()
-            try:
-                credentials = Credentials(
-                    token=cred_dict['token'],
-                    refresh_token=cred_dict['refresh_token'],
-                    token_uri=cred_dict['token_uri'],
-                    client_id=cred_dict['client_id'],
-                    client_secret=cred_dict['client_secret'],
-                    scopes=cred_dict['scopes']
-                )
-            except KeyError:
-                credentials = Credentials.from_authorized_user_info(
-                    json.loads(cred_dict['token_info']),
-                    OAUTH_SCOPE
-                )
-        else:
-            raise ValueError("Firestoreに認証情報が存在しません。")
-
-        if credentials.expired and credentials.refresh_token:
-            credentials.refresh(Request())
-            updated_cred_dict = {
-                'token': credentials.token,
-                'refresh_token': credentials.refresh_token,
-                'token_uri': credentials.token_uri,
-                'client_id': credentials.client_id,
-                'client_secret': credentials.client_secret,
-                'scopes': credentials.scopes,
-                'updated_at': firestore.SERVER_TIMESTAMP
-            }
-            doc_ref.set(updated_cred_dict)
-
-        today = datetime.now().date()
-        fit_data = get_google_fit_data(credentials, today)
-
-        database_id = os.getenv("DATABASE_ID")
-        formatted_date = today.strftime("%Y/%m/%d")
-        page_title = "Google Fit Data " + formatted_date
-
-        properties = {
-            "移動距離 (km)": {"number": fit_data["distance"]},
-            "歩数 (歩)": {"number": fit_data["steps"]},
-            "消費カロリー (kcal)": {"number": fit_data["calories"]},
-            "強めの運動 (分)": {"number": fit_data["active_minutes"]},
-            "平均心拍数 (bpm)": {"number": fit_data["avg_heart_rate"]},
-            "酸素飽和度 (%)": {"number": fit_data["avg_oxygen"]},
-            "体重 (kg)": {"number": fit_data["latest_weight"] if fit_data["latest_weight"] > 0 else None},
-            "睡眠時間 (分)": {"number": fit_data["total_sleep_minutes"]},
-            "日付": {"date": {"start": formatted_date}}
-        }
-
-        existing_page = search_notion_page(database_id, formatted_date)
-
-        if existing_page:
-            print(f"Updating existing page for date: {formatted_date}")
-            res = update_notion_page(existing_page["id"], properties)
-        else:
-            print(f"Creating new page for date: {formatted_date}")
-            res = create_notion_page(database_id, page_title, properties)
-
-        return {"status": "success", "message": "Today's data successfully processed"}
-    except Exception as e:
-        print(f"Error: {str(e)}")
-        return {"status": "error", "message": str(e)}, 500
+        print(f"認証情報の取得に失敗: {str(e)}")
+        raise
 
 def process_data_for_date(target_date):
     """指定された日付のデータを処理する"""
     try:
-        # Firestoreから認証情報を取得し、Google Fitデータを取得する処理
-        # process_yesterday_dataとほぼ同じ処理を行う
-        db = firestore.Client()
-        doc_ref = db.collection(u'credentials').document(u'google_fit')
-        doc = doc_ref.get()
-        if doc.exists:
-            cred_dict = doc.to_dict()
-            try:
-                credentials = Credentials(
-                    token=cred_dict['token'],
-                    refresh_token=cred_dict['refresh_token'],
-                    token_uri=cred_dict['token_uri'],
-                    client_id=cred_dict['client_id'],
-                    client_secret=cred_dict['client_secret'],
-                    scopes=cred_dict['scopes']
-                )
-            except KeyError:
-                credentials = Credentials.from_authorized_user_info(
-                    json.loads(cred_dict['token_info']),
-                    OAUTH_SCOPE
-                )
-        else:
-            raise ValueError("Firestoreに認証情報が存在しません。")
-
-        if credentials.expired and credentials.refresh_token:
-            credentials.refresh(Request())
-            updated_cred_dict = {
-                'token': credentials.token,
-                'refresh_token': credentials.refresh_token,
-                'token_uri': credentials.token_uri,
-                'client_id': credentials.client_id,
-                'client_secret': credentials.client_secret,
-                'scopes': credentials.scopes,
-                'updated_at': firestore.SERVER_TIMESTAMP
-            }
-            doc_ref.set(updated_cred_dict)
-
+        credentials = get_credentials()
         fit_data = get_google_fit_data(credentials, target_date)
         formatted_date = target_date.strftime("%Y/%m/%d")
         page_title = "Google Fit Data " + formatted_date
@@ -435,6 +274,38 @@ def process_data_for_date(target_date):
             "status": "success",
             "message": f"Data successfully processed for date: {formatted_date}"
         }
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        return {"status": "error", "message": str(e)}, 500
+
+def process_yesterday_data():
+    """昨日のデータを処理する"""
+    yesterday = (datetime.now() - timedelta(days=1)).date()
+    return process_data_for_date(yesterday)
+
+def trigger_today():
+    """今日のデータを処理する"""
+    today = datetime.now().date()
+    return process_data_for_date(today)
+
+@functions_framework.cloud_event
+def handler(cloud_event):
+    """Pub/Subメッセージを処理するハンドラー"""
+    try:
+        import base64
+        message = base64.b64decode(cloud_event.data["message"]["data"]).decode()
+        print(f"Received message: {message}")
+
+        if message == "trigger":
+            return process_yesterday_data()
+        else:
+            try:
+                target_date = datetime.strptime(message, '%Y-%m-%d').date()
+                return process_data_for_date(target_date)
+            except ValueError:
+                print(f"Invalid date format: {message}")
+                return process_yesterday_data()
+
     except Exception as e:
         print(f"Error: {str(e)}")
         return {"status": "error", "message": str(e)}, 500

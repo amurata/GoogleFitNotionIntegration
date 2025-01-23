@@ -1,14 +1,12 @@
 import os
-import time
 import json
 from datetime import datetime, timedelta
 import functions_framework
 from util import create_notion_page, search_notion_page, update_notion_page, get_google_fit_data
-from googleapiclient.discovery import build
-from google.cloud import firestore, pubsub_v1
+from google.cloud import firestore
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
-from constants import OAUTH_SCOPE, DATA_TYPES, ACTIVITY_TYPES
+from constants import OAUTH_SCOPE
 
 # 環境変数の取得
 WEBHOOK_API_KEY = os.getenv("WEBHOOK_API_KEY")

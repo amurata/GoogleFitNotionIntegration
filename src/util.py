@@ -2,12 +2,8 @@ import os
 import requests
 from datetime import datetime, time as dt_time
 from googleapiclient.discovery import build
-from google.oauth2.credentials import Credentials
-from google.auth.transport.requests import Request
-from google.cloud import firestore
 import time
-import json
-from constants import OAUTH_SCOPE, DATA_TYPES, ACTIVITY_TYPES
+from constants import DATA_TYPES, ACTIVITY_TYPES
 
 def convert_date_format(date_str, to_iso=True):
     """

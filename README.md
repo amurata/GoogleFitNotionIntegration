@@ -53,7 +53,9 @@ Google Fitの豊富な運動データを活用して、より豊かな健康管�
 ### 1. 必要な認証情報の準備
 1. Google Cloud Platformで新しいプロジェクトを作成
 2. Google Fit APIを有効化
-3. OAuth 2.0クライアントIDを作成し、認証情報をkey.jsonとして保存
+3. OAuth 2.0クライアントIDを作成し、認証情報を`key.json`としてプロジェクトのルートディレクトリに保存
+   - `key.json`はGCP認証情報ファイルで、Google APIへのアクセスに使用されます
+   - 秘密情報を含むため、リポジトリには追加しないでください
 4. Notionでインテグレーションを作成し、シークレットトークンを取得
 5. Notionでデータベースを作成し、インテグレーションと共有
 
@@ -112,10 +114,8 @@ cd scripts/utils
 2. Notionデータベースの権限設定
 3. APIの利用制限
 
-## セキュリティに関する注意
-- `.env`ファイルと`key.json`は秘密情報を含むため、**絶対に**リポジトリに追加しないでください
-- これらのファイルは`.gitignore`で除外されています
-- Webhook API Keyは強力な乱数値を使用することを推奨します
-
 ## ライセンス
 このプロジェクトはMITライセンスの下で公開されています。詳細は[LICENSE](./LICENSE)ファイルを参照してください。
+
+## 謝辞
+このプロジェクトは[tatsuiman/GoogleFitNotionIntegration](https://github.com/tatsuiman/GoogleFitNotionIntegration)を参考に作成しました。

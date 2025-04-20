@@ -31,10 +31,21 @@ Google Fitの豊富な運動データを活用して、より豊かな健康管�
 │   ├── main.py          # メインの実行ファイル
 │   ├── constants.py     # 定数定義（APIスコープ、データタイプ）
 │   ├── util.py          # ユーティリティ関数
+│   ├── webhook.py       # Notionウェブフック処理
 │   └── requirements.txt # 依存パッケージ
-├── auth.py              # 認証設定スクリプト
-├── deploy.sh            # デプロイスクリプト
-└── setup.sh            # セットアップスクリプト
+├── scripts/
+│   ├── utils/
+│   │   ├── auth.py      # 認証設定スクリプト
+│   │   ├── deploy.sh    # デプロイスクリプト
+│   │   ├── setup.sh     # セットアップスクリプト
+│   │   └── trigger_fit.sh # 手動トリガースクリプト
+│   └── archive/         # 使用されていないスクリプト（参考用）
+├── docs/
+│   ├── architecture.png # アーキテクチャ図
+│   ├── diagram.py       # 図生成スクリプト
+│   └── icon/            # アイコン画像
+├── .env.example         # 環境変数のサンプルファイル
+└── LICENSE              # MITライセンス
 ```
 
 ## セットアップ方法
@@ -46,21 +57,30 @@ Google Fitの豊富な運動データを活用して、より豊かな健康管�
 4. Notionでインテグレーションを作成し、シークレットトークンを取得
 5. Notionでデータベースを作成し、インテグレーションと共有
 
-### 2. 認証の設定
+### 2. 環境変数の設定
+`.env.example`ファイルを`.env`にコピーし、必要な情報を入力します：
 ```bash
+cp .env.example .env
+```
+
+`.env`ファイルを編集して、以下の情報を設定します：
+```
+GCP_PROJECT=your-project-id
+NOTION_SECRET=your-notion-secret
+DATABASE_ID=your-database-id
+WEBHOOK_API_KEY=your-webhook-api-key
+```
+
+### 3. 認証の設定
+```bash
+cd scripts/utils
 python auth.py
 ```
 ブラウザが開き、Google認証が要求されます。認証後、トークンがFirestoreに保存されます。
 
-### 3. 環境変数の設定
-```bash
-export NOTION_SECRET=secret_xxxxxxxxxx
-export DATABASE_ID=xxxxxxxxxxxx
-export GCP_PROJECT=xxxxxxx
-```
-
 ### 4. デプロイ
 ```bash
+cd scripts/utils
 ./setup.sh   # 初回セットアップ
 ./deploy.sh  # Cloud Functionsへのデプロイ
 ```
@@ -68,6 +88,7 @@ export GCP_PROJECT=xxxxxxx
 ### 5. トリガーする
 Pub/Subトピック "fit" にメッセージを送信してCloud Functionsをトリガーする
 ```bash
+cd scripts/utils
 ./trigger_fit.sh
 ```
 
@@ -90,3 +111,11 @@ Pub/Subトピック "fit" にメッセージを送信してCloud Functionsをト
 1. 認証情報の有効期限
 2. Notionデータベースの権限設定
 3. APIの利用制限
+
+## セキュリティに関する注意
+- `.env`ファイルと`key.json`は秘密情報を含むため、**絶対に**リポジトリに追加しないでください
+- これらのファイルは`.gitignore`で除外されています
+- Webhook API Keyは強力な乱数値を使用することを推奨します
+
+## ライセンス
+このプロジェクトはMITライセンスの下で公開されています。詳細は[LICENSE](./LICENSE)ファイルを参照してください。

@@ -1,14 +1,20 @@
+import os
+import sys
 from google.cloud import firestore
 from google_auth_oauthlib.flow import InstalledAppFlow
-from constants import OAUTH_SCOPE
+
+# プロジェクトルートへのパスを追加
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
+from src.constants import OAUTH_SCOPE
 
 # 認証情報を取得するためには、以下のコマンドを実行する必要がある
-# PYTHONPATH=src python auth.py
+# cd scripts/utils
+# python auth.py
 
 def oauth2():
     """PKCEを使用した安全な認証フローでGoogleFit APIのアクセストークンを取得"""
     flow = InstalledAppFlow.from_client_secrets_file(
-        "./key.json",
+        "../../key.json",  # 相対パスを修正
         scopes=OAUTH_SCOPE,
         # PKCEはInstalledAppFlowで自動的に有効化される
     )

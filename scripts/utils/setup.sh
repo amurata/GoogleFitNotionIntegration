@@ -1,20 +1,25 @@
 #!/bin/bash
 set -e
 
-# Load environment variables
+# 現在のスクリプトのディレクトリを取得
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+# プロジェクトのルートディレクトリを取得
+PROJECT_ROOT="$( cd "$SCRIPT_DIR/../.." && pwd )"
+
+# 環境変数をロード
 set -a
-source .env
+source "$PROJECT_ROOT/.env"
 set +a
 
-# Enable required services
+# 必要なサービスを有効化
 gcloud services enable fitness.googleapis.com
 
-# Create PubSub topic if it doesn't exist
+# PubSubトピックが存在しない場合は作成
 if ! gcloud pubsub topics describe fit --project=${GCP_PROJECT} > /dev/null 2>&1; then
   gcloud pubsub topics create fit --project=${GCP_PROJECT}
 fi
 
-# Create Cloud Scheduler job
+# Cloud Schedulerジョブを作成
 gcloud scheduler jobs create pubsub fit_job \
   --schedule="00 00 * * *" \
   --topic=fit \

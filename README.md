@@ -88,10 +88,24 @@ cd scripts/utils
 ```
 
 ### 5. トリガーする
-Pub/Subトピック "fit" にメッセージを送信してCloud Functionsをトリガーする
+Pub/Subトピック "fit" にメッセージを送信してCloud Functionsをトリガーするには、以下のスクリプトを使用します：
+
+#### ディレクトリに移動して実行する方法
 ```bash
 cd scripts/utils
-./trigger_fit.sh
+./trigger_fit.sh  # 当日のデータを処理
+```
+
+#### 特定の日付を指定する場合
+```bash
+cd scripts/utils
+./trigger_fit.sh 2025-04-20  # 2025年4月20日のデータを処理
+```
+
+#### プロジェクトルートから実行する方法
+```bash
+./scripts/utils/trigger_fit.sh  # 当日のデータを処理
+./scripts/utils/trigger_fit.sh 2025-04-20  # 特定の日付のデータを処理
 ```
 
 ## 使用しているAPIスコープ

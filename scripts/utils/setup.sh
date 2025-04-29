@@ -21,9 +21,9 @@ fi
 
 # Cloud Schedulerジョブを作成
 gcloud scheduler jobs create pubsub fit_job \
-  --schedule="00 00 * * *" \
+  --schedule="00 04 * * *" \
   --topic=fit \
-  --message-body="go" \
+  --message-body="trigger" \
   --time-zone="Asia/Tokyo" \
   --location="asia-northeast1" \
   --project=${GCP_PROJECT}

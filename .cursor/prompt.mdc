@@ -1,0 +1,18 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+## 必ず守るべきこと
+- 情報確認の重要性: 回答前にREADMEやプロジェクト構造を確認する
+- 根拠なき推測を避ける: 不確かな場合は率直に伝える
+- ユーザー時間の尊重: 不正確な情報でユーザーの時間を無駄にしない
+
+### GoogleFitNotionIntegration 正しい手順
+1. アクセストークン更新:
+   - `cd scripts/utils`
+   - `python auth.py`
+   - ブラウザ認証で `key.json` が更新される
+2. データ取得実行:
+   - `scripts/utils` ディレクトリで `./trigger_fit.sh YYYY-MM-DD` を実行
+   - 日付指定で特定の日のデータを取得

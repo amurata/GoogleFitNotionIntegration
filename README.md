@@ -131,6 +131,17 @@ cd scripts/utils
 ./trigger_fit.sh 2025-04-20  # 2025年4月20日のデータを処理
 ```
 
+#### 連続した日付を指定する場合
+```bash
+cd scripts/utils
+for i in $(seq 1 28); do d=$(printf "%02d" $i); ./trigger_fit.sh 2025-04-$d; sleep 2; done
+```
+
+```fish
+cd scripts/utils
+for i in (seq 1 28); set d (printf "%02d" $i); ./trigger_fit.sh 2025-03-$d; sleep 2; end
+```
+
 #### プロジェクトルートから実行する方法
 ```bash
 ./scripts/utils/trigger_fit.sh  # 当日のデータを処理

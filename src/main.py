@@ -246,35 +246,50 @@ def process_data_for_date(target_date):
         formatted_date = target_date.strftime("%Y/%m/%d")
         page_title = "Google Fit Data " + formatted_date
 
-        properties = {
-            "移動距離 (km)": {"number": fit_data["distance"]},
-            "歩数 (歩)": {"number": fit_data["steps"]},
-            "消費カロリー (kcal)": {"number": fit_data["calories"]},
-            "強めの運動 (分)": {"number": fit_data["active_minutes"]},
-            "平均心拍数 (bpm)": {"number": fit_data["avg_heart_rate"]},
-            "酸素飽和度 (%)": {"number": fit_data["avg_oxygen"]},
-            "体重 (kg)": {"number": fit_data["latest_weight"] if fit_data["latest_weight"] > 0 else None},
-            "睡眠時間 (分)": {"number": fit_data["total_sleep_minutes"]},
-            "日付": {"date": {"start": formatted_date}}
-        }
+        # Notionのページを検索
+        page = search_notion_page(os.getenv("DATABASE_ID"), formatted_date)
 
-        database_id = os.getenv("DATABASE_ID")
-        existing_page = search_notion_page(database_id, formatted_date)
+        if page:  # ページが存在する場合は更新
+            page_id = page["id"]
+            print(f"Updating existing Notion page for {formatted_date}")
 
-        if existing_page:
-            print(f"Updating existing page for date: {formatted_date}")
-            res = update_notion_page(existing_page["id"], properties)
-        else:
-            print(f"Creating new page for date: {formatted_date}")
-            res = create_notion_page(database_id, page_title, properties)
+            properties = {
+                "移動距離 (km)": {"number": fit_data["distance"]},
+                "歩数 (歩)": {"number": fit_data["steps"]},
+                "消費カロリー (kcal)": {"number": fit_data["calories"]},
+                "強めの運動 (分)": {"number": fit_data["active_minutes"]},
+                "平均心拍数 (bpm)": {"number": fit_data["avg_heart_rate"]},
+                "酸素飽和度 (%)": {"number": fit_data["avg_oxygen"]},
+                "体重 (kg)": {"number": fit_data["latest_weight"] if fit_data["latest_weight"] > 0 else None},
+                "睡眠時間 (分)": {"number": fit_data["total_sleep_minutes"]},
+                "日付": {"date": {"start": formatted_date}}
+            }
 
-        return {
-            "status": "success",
-            "message": f"Data successfully processed for date: {formatted_date}"
-        }
+            res = update_notion_page(page_id, properties)
+            print(f"Successfully updated Notion page for {formatted_date}")
+            return res
+        else:  # ページが存在しない場合は新規作成
+            print(f"Creating new Notion page for {formatted_date}")
+
+            properties = {
+                "移動距離 (km)": {"number": fit_data["distance"]},
+                "歩数 (歩)": {"number": fit_data["steps"]},
+                "消費カロリー (kcal)": {"number": fit_data["calories"]},
+                "強めの運動 (分)": {"number": fit_data["active_minutes"]},
+                "平均心拍数 (bpm)": {"number": fit_data["avg_heart_rate"]},
+                "酸素飽和度 (%)": {"number": fit_data["avg_oxygen"]},
+                "体重 (kg)": {"number": fit_data["latest_weight"] if fit_data["latest_weight"] > 0 else None},
+                "睡眠時間 (分)": {"number": fit_data["total_sleep_minutes"]},
+                "日付": {"date": {"start": formatted_date}}
+            }
+
+            res = create_notion_page(os.getenv("DATABASE_ID"), formatted_date, properties)
+            print(f"Successfully created Notion page for {formatted_date}")
+            return res
+
     except Exception as e:
-        print(f"Error: {str(e)}")
-        return {"status": "error", "message": str(e)}, 500
+        print(f"Error processing data for {target_date}: {str(e)}")
+        raise
 
 def process_yesterday_data():
     """昨日のデータを処理する"""

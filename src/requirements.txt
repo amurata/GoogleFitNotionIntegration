@@ -5,3 +5,6 @@ google-auth-oauthlib
 requests
 httplib2
 google-cloud-pubsub
+beautifulsoup4
+notion-client
+statistics

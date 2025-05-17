@@ -27,10 +27,11 @@ else
         --project=${GCP_PROJECT}
 fi
 
-# ログを表示（最新の10件）
-# echo "ログを確認中..."
-# sleep 5
-# gcloud functions logs read GoogleFitNotionIntegration \
-#     --project=${GCP_PROJECT} \
-#     --region=asia-northeast1 \
-#     --limit=10
+# ログを表示（最新の20件、レベルをINFOに設定）
+echo "ログを確認中..."
+sleep 10  # 処理時間をより長く設定
+gcloud functions logs read GoogleFitNotionIntegration \
+    --project=${GCP_PROJECT} \
+    --region=asia-northeast1 \
+    --limit=20 \
+    --min-log-level=info

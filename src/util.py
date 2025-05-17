@@ -1,9 +1,11 @@
 import os
 import requests
-from datetime import datetime, time as dt_time
+from datetime import datetime, time as dt_time, timedelta
 from googleapiclient.discovery import build
 import time
 from constants import DATA_TYPES, ACTIVITY_TYPES
+from google.cloud import firestore
+import json
 
 def convert_date_format(date_str, to_iso=True):
     """
@@ -131,6 +133,9 @@ def create_notion_page(database_id, title, properties):
     return response.json()
 
 def get_google_fit_data(credentials, date):
+    """
+    Google Fitからデータを取得する
+    """
     fitness_service = build("fitness", "v1", credentials=credentials)
     start_time = datetime.combine(date, dt_time.min)
     end_time = datetime.combine(date, dt_time.max)
@@ -195,3 +200,5 @@ def get_google_fit_data(credentials, date):
         "latest_weight": latest_weight,
         "total_sleep_minutes": total_sleep_minutes
     }
+
+

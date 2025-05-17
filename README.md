@@ -3,29 +3,43 @@
 GoogleFitNotionIntegrationは、Google Fitから取得した運動履歴を自動的にNotionデータベースに同期させるシステムです。
 Cloud Scheduler, PubSub, そしてCloud Functionsを活用して、定期的にデータを収集・加工し、あなたの健康管理と運動の進捗をNotionで簡単に追跡できるようにします。
 この統合により、運動習慣の可視化と分析が手間なく行えるようになり、健康管理の質を向上させることができます。
-Google Fitの豊富な運動データを活用して、より豊かな健康管理ライフスタイルを実現しましょう。
+Google Fitの豊富な運動データと天気データを活用して、より豊かな健康管理ライフスタイルを実現しましょう。
 
 ## アーキテクチャ
 ![GoogleFitNotionIntegration Architecture](./docs/architecture.png)
 
 ## 取得可能なデータ
+
+### Google Fitデータ
 以下のデータはGoogle Fitで収集されている場合に取得可能です。Apple HealthからGoogle Fitへの連携設定や、各種測定アプリの利用が前提となります。
 
-### アクティビティデータ
+#### アクティビティデータ
 - 移動距離 (km) - iPhone本体やApple Watchのワークアウトアプリなどで記録
 - 歩数 (歩) - iPhone本体やApple Watchで自動記録
 - 消費カロリー (kcal) - iPhone本体やApple Watchで自動記録
 - 強めの運動時間 (分) - Apple Watchのワークアウトアプリなどで記録
 
-### バイタルデータ
+#### バイタルデータ
 - 平均心拍数 (bpm) - Apple WatchとHeartWatchなどの専用アプリが必要
 - 酸素飽和度 (%) - Apple WatchとHeartWatchなどの専用アプリが必要
 - 体重 (kg) - スマート体重計と専用アプリが必要
 
-### 睡眠データ
+#### 睡眠データ
 - 睡眠時間 (分) - 睡眠追跡アプリが必要
 
 **注意**: データが取得できるかどうかは、使用しているデバイス、アプリ、およびApple HealthからGoogle Fitへの連携設定に依存します。すべてのデータがすべてのユーザーで利用できるとは限りません。
+
+### 天気データ
+Google Maps Platform Weather APIを使用して、指定された位置情報の天気データを取得します。以下のデータが含まれます：
+
+- 天気 - 朝（6-12時）、昼（12-18時）、夜（18-24時）の各時間帯の天気状況
+- 気温 - 各時間帯の平均気温
+- 湿度 - 各時間帯の平均湿度
+- 降水量 - 各時間帯の総降水量
+- 気圧 - 各時間帯の平均気圧
+- 日照時間 - 日の出から日の入りまでの時間（分）
+
+各時間帯のデータは「朝：晴れ、昼：曇り、夜：雨」のようにフォーマットされます。
 
 ## Notionデータベースの設定
 このシステムを使用するには、Notionデータベースに特定のプロパティを設定する必要があります。以下のプロパティ名を正確に設定してください：
@@ -41,6 +55,12 @@ Google Fitの豊富な運動データを活用して、より豊かな健康管�
 | 酸素飽和度 (%) | 数値 | その日の平均酸素飽和度 |
 | 体重 (kg) | 数値 | その日の体重 |
 | 睡眠時間 (分) | 数値 | その日の睡眠時間 |
+| 天気 | テキスト | 朝・昼・夜の天気状況 |
+| 気温 | テキスト | 朝・昼・夜の平均気温 |
+| 湿度 | テキスト | 朝・昼・夜の平均湿度 |
+| 降水量 | テキスト | 朝・昼・夜の降水量 |
+| 気圧 | テキスト | 朝・昼・夜の平均気圧 |
+| 日照時間 | テキスト | 日の出から日の入りまでの時間（分） |
 
 **重要**: プロパティ名は上記と完全に一致している必要があります。特に単位の表記（括弧と単位）まで同じにしてください。
 
@@ -56,11 +76,17 @@ Google Fitの豊富な運動データを活用して、より豊かな健康管�
 ```
 .
 ├── src/
-│   ├── main.py          # メインの実行ファイル
+│   ├── main.py          # メインの実行ファイル（Google Fitデータ処理）
 │   ├── constants.py     # 定数定義（APIスコープ、データタイプ）
 │   ├── util.py          # ユーティリティ関数
 │   ├── webhook.py       # Notionウェブフック処理
+│   ├── trigger_date.py  # 特定日付のデータ処理トリガー
+│   ├── weather/         # 天気データ処理モジュール
+│   │   ├── __init__.py  # パッケージ初期化ファイル
+│   │   ├── weather_notion.py # 天気データ取得・Notion更新機能
+│   │   └── update_weather.py # 天気データ取得・保存スクリプト
 │   └── requirements.txt # 依存パッケージ
+
 ├── scripts/
 │   ├── utils/
 │   │   ├── auth.py      # 認証設定スクリプト
@@ -100,6 +126,9 @@ GCP_PROJECT=your-project-id
 NOTION_SECRET=your-notion-secret
 DATABASE_ID=your-database-id
 WEBHOOK_API_KEY=your-webhook-api-key
+MAPS_API_KEY=your-maps-api-key
+LOCATION_LAT=your-latitude
+LOCATION_LNG=your-longitude
 ```
 
 ### 3. 認証の設定
@@ -139,7 +168,7 @@ for i in $(seq 1 28); do d=$(printf "%02d" $i); ./trigger_fit.sh 2025-04-$d; sle
 
 ```fish
 cd scripts/utils
-for i in (seq 1 28); set d (printf "%02d" $i); ./trigger_fit.sh 2025-03-$d; sleep 2; end
+for i in (seq 1 28); set d (printf "%02d" $i); ./trigger_fit.sh 2025-04-$d; sleep 2; end
 ```
 
 #### プロジェクトルートから実行する方法
@@ -148,6 +177,42 @@ for i in (seq 1 28); set d (printf "%02d" $i); ./trigger_fit.sh 2025-03-$d; slee
 ./scripts/utils/trigger_fit.sh 2025-04-20  # 特定の日付のデータを処理
 ```
 
+### 6. 天気データの取得方法
+以下のコマンドを使用して、気象庁のウェブサイトからデータを取得し、Notionデータベースに保存します。
+
+#### 2日前（前々日）の天気データを取得
+```bash
+./scripts/utils/update_weather.sh
+```
+
+#### 特定の日付の天気データを取得
+```bash
+./scripts/utils/update_weather.sh 2025-04-20  # 2025年4月20日の天気データを取得
+```
+
+#### 天気データを表示のみ（Notionに保存しない）
+```bash
+cd src/weather
+python update_weather.py --no-notion 2025-04-20
+```
+
+#### 連続した日付の天気データを取得
+```bash
+for i in {1..28}; do d=$(printf "%02d" $i); ./scripts/utils/update_weather.sh 2025-04-$d; sleep 2; done
+```
+
+```fish
+for i in (seq 1 28); set d (printf "%02d" $i); ./scripts/utils/update_weather.sh 2025-04-$d; sleep 2; end
+```
+
+**注意**: 前日の天気データを取得しようとすると、気象庁のウェブサイトではまだデータが確定していない可能性があるため、警告が表示されます。
+
+### 3. Weather APIの有効化
+Google Cloud Platformで次の手順を実行します：
+1. Google Maps PlatformのWeather APIを有効化
+2. APIキーを作成し、制限を設定（サーバーキーとして使用するため、適切なIP制限を設定することをお勧めします）
+3. 作成したAPIキーを`MAPS_API_KEY`環境変数に設定
+
 ## 使用しているAPIスコープ
 - fitness.activity.read: アクティビティデータの取得
 - fitness.body.read: 体重データの取得
@@ -155,13 +220,20 @@ for i in (seq 1 28); set d (printf "%02d" $i); ./trigger_fit.sh 2025-03-$d; slee
 - fitness.oxygen_saturation.read: 酸素飽和度の取得
 - fitness.sleep.read: 睡眠データの取得
 
+### 使用している外部API
+- Google Fit API: 運動・健康データの取得（2024年後半にサービス終了予定）
+- Google Maps Platform Weather API: 天気データの取得
+- Notion API: データの保存と管理
+
 ## 注意事項
 - Google Fit APIは2024年後半にサービス終了予定です
+- Weather APIはプレビュー段階のサービスです
 - データの取得頻度はCloud Schedulerの設定に依存します
 - 体重データは記録がある場合のみ保存されます
 - すべてのデータは日次で集計されます
 - Apple HealthからGoogle Fitへのデータ連携が適切に設定されていることを確認してください
 - 一部のデータはデバイスやアプリに依存し、利用できない場合があります
+- 天気データは指定された位置情報に基づいて取得されます
 
 ## トラブルシューティング
 エラーが発生した場合は、GCPコンソールのCloud Functionsログで詳細を確認できます。

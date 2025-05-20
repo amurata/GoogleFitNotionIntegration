@@ -205,6 +205,19 @@ def update_notion_database(weather_data, date_str):
             }
         )
 
+        # 「振り返り」プロパティがチェックされているか確認
+        if query_result["results"]:
+            page = query_result["results"][0]
+            page_id = page["id"]
+
+            # ページの詳細情報を取得（すべてのプロパティを含む）
+            page_details = notion.pages.retrieve(page_id=page_id)
+
+            # 「振り返り」プロパティが存在し、チェックされているか確認
+            if "振り返り" in page_details["properties"] and page_details["properties"]["振り返り"].get("checkbox", False):
+                print(f"注意: {date_str} のエントリーは「振り返り」チェックが入っているため更新をスキップします。")
+                return True
+
         # ページのプロパティを作成
         properties = {
             "日付": {
@@ -279,9 +292,9 @@ def update_notion_database(weather_data, date_str):
                 properties=properties
             )
             print(f"Notionに新しいページを作成しました: {date_str}")
-            
+
         return True
-    
+
     except Exception as e:
         print(f"Notionデータベース更新エラー: {str(e)}")
         return False
@@ -292,26 +305,26 @@ def main():
     parser.add_argument('--month', type=int, help='月 (例: 5)')
     parser.add_argument('--day', type=int, help='日 (例: 15)')
     parser.add_argument('--notion', action='store_true', help='Notionにも保存する')
-    
+
     args = parser.parse_args()
-    
+
     now = datetime.now()
     year = args.year if args.year else now.year
     month = args.month if args.month else now.month
     day = args.day if args.day else now.day
-    
+
     weather_data = get_weather_data(year, month, day)
-    
+
     # データを表示
     print(f"{year}年{month}月{day}日の天気データ:")
     for key, value in weather_data.items():
         print(f"{key}: {value}")
-    
+
     # Notionに保存
     if args.notion:
         update_notion_database(weather_data, weather_data["日付"])
         print("Notionへの保存が完了しました。")
-    
+
     return 0
 
 if __name__ == "__main__":

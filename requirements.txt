@@ -1,0 +1,7 @@
+beautifulsoup4==4.12.2
+requests==2.31.0
+notion-client==2.2.1
+fastapi==0.104.1
+uvicorn==0.23.2
+python-dotenv==1.0.0
+gunicorn==21.2.0 

@@ -61,6 +61,7 @@ Google Maps Platform Weather APIを使用して、指定された位置情報の
 | 降水量 | テキスト | 朝・昼・夜の降水量 |
 | 気圧 | テキスト | 朝・昼・夜の平均気圧 |
 | 日照時間 | テキスト | 日の出から日の入りまでの時間（分） |
+| 振り返り | チェックボックス | データ更新をスキップ |
 
 **重要**: プロパティ名は上記と完全に一致している必要があります。特に単位の表記（括弧と単位）まで同じにしてください。
 
@@ -202,7 +203,7 @@ for i in {1..28}; do d=$(printf "%02d" $i); ./scripts/utils/update_weather.sh 20
 ```
 
 ```fish
-for i in (seq 1 28); set d (printf "%02d" $i); ./scripts/utils/update_weather.sh 2025-04-$d; sleep 2; end
+for i in (seq 1 30); set d (printf "%02d" $i); ./scripts/utils/update_weather.sh 2025-04-$d; sleep 2; end
 ```
 
 **注意**: 前日の天気データを取得しようとすると、気象庁のウェブサイトではまだデータが確定していない可能性があるため、警告が表示されます。
@@ -249,3 +250,102 @@ Google Cloud Platformで次の手順を実行します：
 
 ## 謝辞
 このプロジェクトは[tatsuiman/GoogleFitNotionIntegration](https://github.com/tatsuiman/GoogleFitNotionIntegration)を参考に作成しました。
+
+## 機能
+
+- 気象庁のウェブサイトから天気データをスクレイピング
+- 指定された日付または日付範囲のデータを取得
+- Notionデータベースに天気データを保存
+- 「振り返り」プロパティがチェックされているエントリーは更新をスキップ
+
+## 更新履歴
+
+### 最新の変更点
+
+- **日付範囲指定機能**: 一度に複数日のデータを取得できるようになりました（2秒間隔で順次取得）
+- **「振り返り」スキップ機能**: Notionの「振り返り」プロパティがチェックされているエントリーは更新しないようになりました
+- **Cloud Run対応**: FastAPIでAPIを実装し、Cloud Runにデプロイ可能になりました
+
+## 使い方
+
+### コマンドライン
+
+```bash
+# 前々日（2日前）の天気データを取得
+python src/weather/update_weather.py
+
+# 指定日の天気データを取得
+python src/weather/update_weather.py 2023-11-01
+
+# 指定期間の天気データを取得（日付範囲指定）
+python src/weather/update_weather.py 2023-11-01 2023-11-05
+
+# Notionに保存せず、表示のみ
+python src/weather/update_weather.py --no-notion
+
+# スクレイピング間隔を指定（デフォルト: 2秒）
+python src/weather/update_weather.py 2023-11-01 2023-11-05 --sleep 3.0
+```
+
+### APIサーバー
+
+```bash
+# ローカルでAPIサーバーを起動
+python src/app.py
+```
+
+APIエンドポイント:
+
+- `GET /api/v1/health` - ヘルスチェック
+- `GET /api/v1/update-weather?start_date=2023-11-01&end_date=2023-11-05` - 日付範囲の天気データを取得（GET）
+- `POST /api/v1/update-weather` - 日付範囲の天気データを取得（POST、JSONリクエスト）
+
+POSTリクエストの例:
+
+```json
+{
+  "start_date": "2023-11-01",
+  "end_date": "2023-11-05",
+  "update_notion": true,
+  "sleep_seconds": 2.0
+}
+```
+
+## 環境変数
+
+必要な環境変数:
+
+- `NOTION_SECRET` - NotionのAPIシークレットキー
+- `DATABASE_ID` - Notionデータベースのプライマリキー
+
+## Cloud Runへのデプロイ
+
+```bash
+# Dockerイメージのビルド
+docker build -t weather-notion-api .
+
+# ローカルでの実行（テスト用）
+docker run -p 8080:8080 -e NOTION_SECRET=your_secret -e DATABASE_ID=your_db_id weather-notion-api
+
+# Google Cloud Run へのデプロイ
+gcloud builds submit --tag gcr.io/YOUR_PROJECT_ID/weather-notion-api
+gcloud run deploy weather-notion-api --image gcr.io/YOUR_PROJECT_ID/weather-notion-api --platform managed
+```
+
+### CloudRunのデプロイ時の注意点
+
+1. 環境変数 `NOTION_SECRET` と `DATABASE_ID` をCloud Runの環境変数として設定
+2. 必要に応じてタイムアウト設定を調整（長期間のデータ取得には長いタイムアウトが必要）
+3. メモリ割り当てを適切に設定（最小256MB推奨）
+
+## Notionデータベース設定
+
+必要なプロパティ：
+- `日付`: 日付型
+- `天気`: リッチテキスト型
+- `気温`: リッチテキスト型
+- `湿度`: リッチテキスト型
+- `降水量`: リッチテキスト型
+- `気圧`: リッチテキスト型
+- `日照時間`: リッチテキスト型
+- `振り返り`: チェックボックス型（チェックが入っているとデータ更新をスキップ）

@@ -1,5 +1,20 @@
 #!/bin/bash
 
+# プロジェクトルートディレクトリを取得
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# 環境変数をロード
+echo "環境変数を読み込み中..."
+if [ -f "$PROJECT_ROOT/.env" ]; then
+  set -a
+  source "$PROJECT_ROOT/.env"
+  set +a
+  echo "環境変数を読み込みました"
+else
+  echo "警告: .envファイルが見つかりません ($PROJECT_ROOT/.env)"
+fi
+
 # 使い方の表示
 function show_usage {
   echo "使い方: $0 [オプション] 開始日 終了日"
@@ -7,10 +22,14 @@ function show_usage {
   echo "  -h, --help        このヘルプを表示"
   echo "  -l, --local       ローカルモードで実行 (Cloud Functionを使用しない)"
   echo "  -p, --parallel N  並列処理数 (デフォルト: 3)"
+  echo "  --fit-only        バイタルデータのみ処理"
+  echo "  --weather-only    天候データのみ処理"
   echo "例:"
-  echo "  $0 2023-10-01 2023-10-31      # 10月の全日付をCloud Functionで処理"
+  echo "  $0 2023-10-01 2023-10-31      # 10月の全日付でバイタル・天候データを処理"
   echo "  $0 -l 2023-01-01 2023-01-31   # 1月の全日付をローカルで処理"
   echo "  $0 -p 5 2023-11-01 2023-11-30 # 11月の全日付を5並列で処理"
+  echo "  $0 --fit-only 2023-10-01 2023-10-31    # バイタルデータのみ処理"
+  echo "  $0 --weather-only 2023-10-01 2023-10-31 # 天候データのみ処理"
   exit 1
 }
 
@@ -45,6 +64,8 @@ function compare_dates {
 # パラメータの初期値
 LOCAL_MODE=""
 PARALLEL=3
+PROCESS_FIT=true
+PROCESS_WEATHER=true
 
 # 引数の解析
 while [[ $# -gt 0 ]]; do
@@ -59,6 +80,16 @@ while [[ $# -gt 0 ]]; do
     -p|--parallel)
       PARALLEL="$2"
       shift 2
+      ;;
+    --fit-only)
+      PROCESS_FIT=true
+      PROCESS_WEATHER=false
+      shift
+      ;;
+    --weather-only)
+      PROCESS_FIT=false
+      PROCESS_WEATHER=true
+      shift
       ;;
     *)
       break
@@ -92,13 +123,21 @@ if ! compare_dates "$START_DATE" "$END_DATE"; then
   exit 1
 fi
 
-# 日付リストの生成
+# 処理内容の表示
 echo "処理する日付範囲: $START_DATE から $END_DATE"
 echo "並列処理数: $PARALLEL"
 if [ -n "$LOCAL_MODE" ]; then
   echo "実行モード: ローカル"
 else
   echo "実行モード: Cloud Function"
+fi
+
+echo "処理対象:"
+if [ "$PROCESS_FIT" = true ]; then
+  echo "  - バイタルデータ (Google Fit)"
+fi
+if [ "$PROCESS_WEATHER" = true ]; then
+  echo "  - 天候データ"
 fi
 
 echo "処理を開始します..."
@@ -114,10 +153,42 @@ done
 
 # 並列処理関数
 function process_batch {
-  local batch=("$@")
-  echo "処理するバッチ: ${batch[*]}"
-  python3 "$(dirname "$0")/trigger_date.py" $LOCAL_MODE "${batch[@]}"
-  return $?
+  local date=$1
+  echo "処理中: $date"
+
+  local fit_success=true
+  local weather_success=true
+
+  # バイタルデータ処理
+  if [ "$PROCESS_FIT" = true ]; then
+    echo "  バイタルデータを処理中..."
+    if ! bash "$PROJECT_ROOT/scripts/utils/trigger_fit.sh" "$date"; then
+      echo "  エラー: バイタルデータの処理に失敗 ($date)"
+      fit_success=false
+    else
+      echo "  バイタルデータ処理完了 ($date)"
+    fi
+  fi
+
+  # 天候データ処理
+  if [ "$PROCESS_WEATHER" = true ]; then
+    echo "  天候データを処理中..."
+    if ! bash "$PROJECT_ROOT/scripts/utils/update_weather.sh" "$date"; then
+      echo "  エラー: 天候データの処理に失敗 ($date)"
+      weather_success=false
+    else
+      echo "  天候データ処理完了 ($date)"
+    fi
+  fi
+
+  # 結果判定
+  if [ "$fit_success" = true ] && [ "$weather_success" = true ]; then
+    echo "  成功: $date の全データ処理完了"
+    return 0
+  else
+    echo "  失敗: $date の処理でエラーが発生"
+    return 1
+  fi
 }
 
 # 日付を処理
@@ -127,8 +198,51 @@ error=0
 
 # GNU parallelが使えるか確認
 if command -v parallel >/dev/null 2>&1; then
-  # export関数をfishシェルでも動作するように修正
-  echo "process_batch() { echo \"処理するバッチ: \$@\"; python3 \"$(dirname "$0")/trigger_date.py\" $LOCAL_MODE \"\$@\"; return \$?; }" > /tmp/process_batch_func.sh
+  # 環境変数をexport
+  export SCRIPT_DIR PROJECT_ROOT PROCESS_FIT PROCESS_WEATHER LOCAL_MODE
+
+  # 関数をexport用ファイルに保存
+  cat > /tmp/process_batch_func.sh << 'EOF'
+process_batch() {
+  local date=$1
+  echo "処理中: $date"
+
+  local fit_success=true
+  local weather_success=true
+
+  # バイタルデータ処理
+  if [ "$PROCESS_FIT" = true ]; then
+    echo "  バイタルデータを処理中..."
+    if ! bash "$PROJECT_ROOT/scripts/utils/trigger_fit.sh" "$date"; then
+      echo "  エラー: バイタルデータの処理に失敗 ($date)"
+      fit_success=false
+    else
+      echo "  バイタルデータ処理完了 ($date)"
+    fi
+  fi
+
+  # 天候データ処理
+  if [ "$PROCESS_WEATHER" = true ]; then
+    echo "  天候データを処理中..."
+    if ! bash "$PROJECT_ROOT/scripts/utils/update_weather.sh" "$date"; then
+      echo "  エラー: 天候データの処理に失敗 ($date)"
+      weather_success=false
+    else
+      echo "  天候データ処理完了 ($date)"
+    fi
+  fi
+
+  # 結果判定
+  if [ "$fit_success" = true ] && [ "$weather_success" = true ]; then
+    echo "  成功: $date の全データ処理完了"
+    return 0
+  else
+    echo "  失敗: $date の処理でエラーが発生"
+    return 1
+  fi
+}
+EOF
+
   source /tmp/process_batch_func.sh
   export -f process_batch
 
@@ -154,5 +268,15 @@ else
   EXIT_CODE=$([[ $error -eq 0 ]] && echo 0 || echo 1)
 fi
 
-echo "すべての処理が完了しました。終了コード: $EXIT_CODE"
+echo
+echo "すべての処理が完了しました。"
+echo "処理結果:"
+if [ "$PROCESS_FIT" = true ] && [ "$PROCESS_WEATHER" = true ]; then
+  echo "  - バイタルデータ・天候データの統合処理"
+elif [ "$PROCESS_FIT" = true ]; then
+  echo "  - バイタルデータのみ処理"
+elif [ "$PROCESS_WEATHER" = true ]; then
+  echo "  - 天候データのみ処理"
+fi
+echo "終了コード: $EXIT_CODE"
 exit $EXIT_CODE

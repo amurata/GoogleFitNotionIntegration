@@ -63,8 +63,7 @@ Cloud Schedulerを使用して、定期的（例: 毎日）にデータを更新
 
 ```bash
 # 環境変数の設定
-export CLOUD_FUNCTION_URL="https://us-central1-your-project-id.cloudfunctions.net/webhook_handler"
-export WEBHOOK_API_KEY="your-api-key"
+export CLOUD_FUNCTION_URL="https://asia-northeast1-your-project-id.cloudfunctions.net/your-function-name"
 
 # 特定の日付を処理
 python src/trigger_date.py 2023-11-15
@@ -102,8 +101,8 @@ python src/trigger_date.py --local 2023-11-15
 問題が発生した場合は、以下を確認してください:
 
 1. **環境変数の設定**
-   - `CLOUD_FUNCTION_URL`と`WEBHOOK_API_KEY`が正しく設定されているか
-   - `echo $CLOUD_FUNCTION_URL`と`echo $WEBHOOK_API_KEY`で確認
+   - `CLOUD_FUNCTION_URL`が正しく設定されているか
+   - `echo $CLOUD_FUNCTION_URL`で確認
 
 2. **Cloud Function**
    - デプロイされたCloud Functionが正常に動作するか

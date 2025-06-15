@@ -1,9 +1,7 @@
 # Google Fit Notion Integration
 
-GoogleFitNotionIntegrationは、Google Fitから取得した運動履歴を自動的にNotionデータベースに同期させるシステムです。
-Cloud Scheduler, PubSub, そしてCloud Functionsを活用して、定期的にデータを収集・加工し、あなたの健康管理と運動の進捗をNotionで簡単に追跡できるようにします。
-この統合により、運動習慣の可視化と分析が手間なく行えるようになり、健康管理の質を向上させることができます。
-Google Fitの豊富な運動データと天気データを活用して、より豊かな健康管理ライフスタイルを実現しましょう。
+GoogleFitNotionIntegrationは、Google Fitから取得した運動・バイタルデータと天候データをNotionデータベースに自動記録するシステムです。
+Google Cloud Functions/Run、Firestore、Notion API、気象庁データスクレイピングを活用し、健康管理を効率化します。
 
 ## アーキテクチャ
 ![GoogleFitNotionIntegration Architecture](./docs/architecture.png)
@@ -73,279 +71,120 @@ Google Maps Platform Weather APIを使用して、指定された位置情報の
 
 これらのテンプレートを使用して、Google Fitからのデータを記録するための日記ページを作成し、健康習慣の可視化と継続をサポートすることができます。
 
-## プロジェクト構造
+## プロジェクト構成
 ```
 .
 ├── src/
-│   ├── main.py          # メインの実行ファイル（Google Fitデータ処理）
-│   ├── constants.py     # 定数定義（APIスコープ、データタイプ）
-│   ├── util.py          # ユーティリティ関数
-│   ├── webhook.py       # Notionウェブフック処理
-│   ├── trigger_date.py  # 特定日付のデータ処理トリガー
-│   ├── weather/         # 天気データ処理モジュール
-│   │   ├── __init__.py  # パッケージ初期化ファイル
-│   │   ├── weather_notion.py # 天気データ取得・Notion更新機能
-│   │   └── update_weather.py # 天気データ取得・保存スクリプト
-│   └── requirements.txt # 依存パッケージ
-
+│   ├── main.py          # Google Fitデータ・Notion連携本体
+│   ├── util.py          # Google Fit/Notionユーティリティ
+│   ├── constants.py     # 定数定義
+│   ├── trigger_date.py  # 日付指定バッチトリガー
+│   ├── batch_process.sh # バッチ処理用シェル
+│   └── weather/
+│       ├── weather_notion.py # 天気データ取得・Notion更新
+│       ├── update_weather.py # 天気データ取得・保存
+│       └── __init__.py
 ├── scripts/
-│   ├── utils/
-│   │   ├── auth.py      # 認証設定スクリプト
-│   │   ├── deploy.sh    # デプロイスクリプト
-│   │   ├── setup.sh     # セットアップスクリプト
-│   │   └── trigger_fit.sh # 手動トリガースクリプト
-│   └── archive/         # 使用されていないスクリプト（参考用）
+│   └── utils/
+│       ├── auth.py      # Google認証・Firestore保存（これ一本でOK）
+│       ├── audit_credentials.py # 認証情報監査
+│       ├── rotate_credentials.py # 認証ローテーション
+│       ├── deploy.sh   # Cloud Functionsデプロイ
+│       ├── trigger_fit.sh # PubSubトリガ
+│       ├── update_weather.sh # 天候データ更新
+│       └── setup.sh    # 初期セットアップ
 ├── docs/
-│   ├── architecture.png # アーキテクチャ図
-│   ├── diagram.py       # 図生成スクリプト
-│   └── icon/            # アイコン画像
-├── .env.example         # 環境変数のサンプルファイル
-└── LICENSE              # MITライセンス
+│   ├── architecture.png
+│   └── ...
+├── .env.example
+├── .env
+└── LICENSE
 ```
 
-## セットアップ方法
+## セットアップ手順
 
-### 1. 必要な認証情報の準備
-1. Google Cloud Platformで新しいプロジェクトを作成
-2. Google Fit APIを有効化
-3. OAuth 2.0クライアントIDを作成し、認証情報を`key.json`としてプロジェクトのルートディレクトリに保存
-   - `key.json`はGCP認証情報ファイルで、Google APIへのアクセスに使用されます
-   - 秘密情報を含むため、リポジトリには追加しないでください
-4. Notionでインテグレーションを作成し、シークレットトークンを取得
-5. Notionでデータベースを作成し、インテグレーションと共有
-   - 上記の「Notionデータベースの設定」セクションに記載されたプロパティを正確に設定してください
+### 1. Notionインテグレーション・データベース作成
+- Notionでインテグレーションを作成し、シークレットトークンを取得
+- データベースを作成し、インテグレーションと共有
+- 上記のプロパティを正確に作成
 
 ### 2. 環境変数の設定
-`.env.example`ファイルを`.env`にコピーし、必要な情報を入力します：
+`.env.example`をコピーして`.env`を作成し、必要な値を入力
+
+### 3. Google認証・Firestore保存
+**これ一本でOK！**
 ```bash
-cp .env.example .env
+python scripts/utils/auth.py
 ```
-
-`.env`ファイルを編集して、以下の情報を設定します：
-```
-GCP_PROJECT=your-project-id
-NOTION_SECRET=your-notion-secret
-DATABASE_ID=your-database-id
-WEBHOOK_API_KEY=your-webhook-api-key
-MAPS_API_KEY=your-maps-api-key
-LOCATION_LAT=your-latitude
-LOCATION_LNG=your-longitude
-```
-
-### 3. 認証の設定
-```bash
-cd scripts/utils
-python auth.py
-```
-ブラウザが開き、Google認証が要求されます。認証後、トークンがFirestoreに保存されます。
-
-### 4. デプロイ
-```bash
-cd scripts/utils
-./setup.sh   # 初回セットアップ
-./deploy.sh  # Cloud Functionsへのデプロイ
-```
-
-### 5. トリガーする
-Pub/Subトピック "fit" にメッセージを送信してCloud Functionsをトリガーするには、以下のスクリプトを使用します：
-
-#### ディレクトリに移動して実行する方法
-```bash
-cd scripts/utils
-./trigger_fit.sh  # 当日のデータを処理
-```
-
-#### 特定の日付を指定する場合
-```bash
-cd scripts/utils
-./trigger_fit.sh 2025-04-20  # 2025年4月20日のデータを処理
-```
-
-#### 連続した日付を指定する場合
-```bash
-cd scripts/utils
-for i in $(seq 1 28); do d=$(printf "%02d" $i); ./trigger_fit.sh 2025-04-$d; sleep 2; done
-```
-
 ```fish
-cd scripts/utils
-for i in (seq 1 28); set d (printf "%02d" $i); ./trigger_fit.sh 2025-04-$d; sleep 2; end
+python scripts/utils/auth.py
 ```
+- ブラウザ認証後、自動でFirestoreに認証情報が保存されます
 
-#### プロジェクトルートから実行する方法
+### 4. Cloud Functions/Runデプロイ
 ```bash
-./scripts/utils/trigger_fit.sh  # 当日のデータを処理
-./scripts/utils/trigger_fit.sh 2025-04-20  # 特定の日付のデータを処理
+./scripts/utils/deploy.sh
 ```
-
-### 6. 天気データの取得方法
-以下のコマンドを使用して、気象庁のウェブサイトからデータを取得し、Notionデータベースに保存します。
-
-#### 2日前（前々日）の天気データを取得
-```bash
-./scripts/utils/update_weather.sh
-```
-
-#### 特定の日付の天気データを取得
-```bash
-./scripts/utils/update_weather.sh 2025-04-20  # 2025年4月20日の天気データを取得
-```
-
-#### 天気データを表示のみ（Notionに保存しない）
-```bash
-cd src/weather
-python update_weather.py --no-notion 2025-04-20
-```
-
-#### 連続した日付の天気データを取得
-```bash
-for i in {1..28}; do d=$(printf "%02d" $i); ./scripts/utils/update_weather.sh 2025-04-$d; sleep 2; done
-```
-
 ```fish
-for i in (seq 1 30); set d (printf "%02d" $i); ./scripts/utils/update_weather.sh 2025-04-$d; sleep 2; end
+./scripts/utils/deploy.sh
 ```
 
-**注意**: 前日の天気データを取得しようとすると、気象庁のウェブサイトではまだデータが確定していない可能性があるため、警告が表示されます。
+### 5. バイタル・運動データのNotion連携を手動トリガ
+```bash
+./scripts/utils/trigger_fit.sh 2025-04-20
+```
+```fish
+./scripts/utils/trigger_fit.sh 2025-04-20
+```
+- 日付省略で当日分
 
-### 3. Weather APIの有効化
-Google Cloud Platformで次の手順を実行します：
-1. Google Maps PlatformのWeather APIを有効化
-2. APIキーを作成し、制限を設定（サーバーキーとして使用するため、適切なIP制限を設定することをお勧めします）
-3. 作成したAPIキーを`MAPS_API_KEY`環境変数に設定
+### 6. 天候データのNotion連携
+```bash
+./scripts/utils/update_weather.sh 2025-04-20
+```
+```fish
+./scripts/utils/update_weather.sh 2025-04-20
+```
+- 日付省略で2日前分
 
-## 使用しているAPIスコープ
-- fitness.activity.read: アクティビティデータの取得
-- fitness.body.read: 体重データの取得
-- fitness.heart_rate.read: 心拍数データの取得
-- fitness.oxygen_saturation.read: 酸素飽和度の取得
-- fitness.sleep.read: 睡眠データの取得
+### 7. バッチ処理（例：複数日まとめて）
+```bash
+# バイタル・天候データを両方処理（デフォルト）
+bash src/batch_process.sh 2025-04-01 2025-04-10
 
-### 使用している外部API
-- Google Fit API: 運動・健康データの取得（2024年後半にサービス終了予定）
-- Google Maps Platform Weather API: 天気データの取得
-- Notion API: データの保存と管理
+# バイタルデータのみ処理
+bash src/batch_process.sh --fit-only 2025-04-01 2025-04-10
 
-## 注意事項
-- Google Fit APIは2024年後半にサービス終了予定です
-- Weather APIはプレビュー段階のサービスです
-- データの取得頻度はCloud Schedulerの設定に依存します
-- 体重データは記録がある場合のみ保存されます
-- すべてのデータは日次で集計されます
-- Apple HealthからGoogle Fitへのデータ連携が適切に設定されていることを確認してください
-- 一部のデータはデバイスやアプリに依存し、利用できない場合があります
-- 天気データは指定された位置情報に基づいて取得されます
+# 天候データのみ処理
+bash src/batch_process.sh --weather-only 2025-04-01 2025-04-10
+
+# 並列処理数を指定
+bash src/batch_process.sh -p 5 2025-04-01 2025-04-10
+```
+```fish
+# バイタル・天候データを両方処理（デフォルト）
+bash src/batch_process.sh 2025-04-01 2025-04-10
+
+# バイタルデータのみ処理
+bash src/batch_process.sh --fit-only 2025-04-01 2025-04-10
+
+# 天候データのみ処理
+bash src/batch_process.sh --weather-only 2025-04-01 2025-04-10
+
+# 並列処理数を指定
+bash src/batch_process.sh -p 5 2025-04-01 2025-04-10
+```
+
+## セキュリティ・運用
+- 認証情報はFirestoreで一元管理
+- 認証情報の監査: `python scripts/utils/audit_credentials.py`
+- トークンローテーション: `python scripts/utils/rotate_credentials.py`
+- 3ヶ月ごとにローテーション推奨
 
 ## トラブルシューティング
-エラーが発生した場合は、GCPコンソールのCloud Functionsログで詳細を確認できます。
-主な確認ポイント：
-1. 認証情報の有効期限
-2. Notionデータベースの権限設定
-3. APIの利用制限
-4. Notionデータベースのプロパティ名が正確に設定されているか
-5. Google Fitに適切なデータが連携されているか
+- Notionデータベースのプロパティ名・権限を再確認
+- GCP Cloud Functions/Runのログでエラー詳細確認
+- 認証情報の有効期限切れ時は`auth.py`で再認証
 
 ## ライセンス
-このプロジェクトはMITライセンスの下で公開されています。詳細は[LICENSE](./LICENSE)ファイルを参照してください。
-
-## 謝辞
-このプロジェクトは[tatsuiman/GoogleFitNotionIntegration](https://github.com/tatsuiman/GoogleFitNotionIntegration)を参考に作成しました。
-
-## 機能
-
-- 気象庁のウェブサイトから天気データをスクレイピング
-- 指定された日付または日付範囲のデータを取得
-- Notionデータベースに天気データを保存
-- 「振り返り」プロパティがチェックされているエントリーは更新をスキップ
-
-## 更新履歴
-
-### 最新の変更点
-
-- **日付範囲指定機能**: 一度に複数日のデータを取得できるようになりました（2秒間隔で順次取得）
-- **「振り返り」スキップ機能**: Notionの「振り返り」プロパティがチェックされているエントリーは更新しないようになりました
-- **Cloud Run対応**: FastAPIでAPIを実装し、Cloud Runにデプロイ可能になりました
-
-## 使い方
-
-### コマンドライン
-
-```bash
-# 前々日（2日前）の天気データを取得
-python src/weather/update_weather.py
-
-# 指定日の天気データを取得
-python src/weather/update_weather.py 2023-11-01
-
-# 指定期間の天気データを取得（日付範囲指定）
-python src/weather/update_weather.py 2023-11-01 2023-11-05
-
-# Notionに保存せず、表示のみ
-python src/weather/update_weather.py --no-notion
-
-# スクレイピング間隔を指定（デフォルト: 2秒）
-python src/weather/update_weather.py 2023-11-01 2023-11-05 --sleep 3.0
-```
-
-### APIサーバー
-
-```bash
-# ローカルでAPIサーバーを起動
-python src/app.py
-```
-
-APIエンドポイント:
-
-- `GET /api/v1/health` - ヘルスチェック
-- `GET /api/v1/update-weather?start_date=2023-11-01&end_date=2023-11-05` - 日付範囲の天気データを取得（GET）
-- `POST /api/v1/update-weather` - 日付範囲の天気データを取得（POST、JSONリクエスト）
-
-POSTリクエストの例:
-
-```json
-{
-  "start_date": "2023-11-01",
-  "end_date": "2023-11-05",
-  "update_notion": true,
-  "sleep_seconds": 2.0
-}
-```
-
-## 環境変数
-
-必要な環境変数:
-
-- `NOTION_SECRET` - NotionのAPIシークレットキー
-- `DATABASE_ID` - Notionデータベースのプライマリキー
-
-## Cloud Runへのデプロイ
-
-```bash
-# Dockerイメージのビルド
-docker build -t weather-notion-api .
-
-# ローカルでの実行（テスト用）
-docker run -p 8080:8080 -e NOTION_SECRET=your_secret -e DATABASE_ID=your_db_id weather-notion-api
-
-# Google Cloud Run へのデプロイ
-gcloud builds submit --tag gcr.io/YOUR_PROJECT_ID/weather-notion-api
-gcloud run deploy weather-notion-api --image gcr.io/YOUR_PROJECT_ID/weather-notion-api --platform managed
-```
-
-### CloudRunのデプロイ時の注意点
-
-1. 環境変数 `NOTION_SECRET` と `DATABASE_ID` をCloud Runの環境変数として設定
-2. 必要に応じてタイムアウト設定を調整（長期間のデータ取得には長いタイムアウトが必要）
-3. メモリ割り当てを適切に設定（最小256MB推奨）
-
-## Notionデータベース設定
-
-必要なプロパティ：
-- `日付`: 日付型
-- `天気`: リッチテキスト型
-- `気温`: リッチテキスト型
-- `湿度`: リッチテキスト型
-- `降水量`: リッチテキスト型
-- `気圧`: リッチテキスト型
-- `日照時間`: リッチテキスト型
-- `振り返り`: チェックボックス型（チェックが入っているとデータ更新をスキップ）
+MIT

@@ -160,6 +160,8 @@ cython_debug/
 #.idea/
 .envrc
 key.json
+credentials.json
+client_secret.json
 
 .env
 venv

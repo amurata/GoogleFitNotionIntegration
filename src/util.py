@@ -4,7 +4,6 @@ from datetime import datetime, time as dt_time, timedelta
 from googleapiclient.discovery import build
 import time
 from constants import DATA_TYPES, ACTIVITY_TYPES
-from google.cloud import firestore
 import json
 
 def convert_date_format(date_str, to_iso=True):

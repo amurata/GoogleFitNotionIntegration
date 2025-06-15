@@ -22,14 +22,14 @@ function show_usage {
   echo "  -h, --help        このヘルプを表示"
   echo "  -l, --local       ローカルモードで実行 (Cloud Functionを使用しない)"
   echo "  -p, --parallel N  並列処理数 (デフォルト: 3)"
-  echo "  --fit-only        バイタルデータのみ処理"
-  echo "  --weather-only    天候データのみ処理"
+  echo "  --fit-only        バイタルデータのみ更新（天候データは既存のまま保持）"
+  echo "  --weather-only    天候データのみ更新（バイタルデータは既存のまま保持）"
   echo "例:"
-  echo "  $0 2023-10-01 2023-10-31      # 10月の全日付でバイタル・天候データを処理"
-  echo "  $0 -l 2023-01-01 2023-01-31   # 1月の全日付をローカルで処理"
-  echo "  $0 -p 5 2023-11-01 2023-11-30 # 11月の全日付を5並列で処理"
-  echo "  $0 --fit-only 2023-10-01 2023-10-31    # バイタルデータのみ処理"
-  echo "  $0 --weather-only 2023-10-01 2023-10-31 # 天候データのみ処理"
+  echo "  $0 2023-10-01 2023-10-31      # 10月の全日付でバイタル・天候データを更新"
+  echo "  $0 -l 2023-01-01 2023-01-31   # 1月の全日付をローカルで更新"
+  echo "  $0 -p 5 2023-11-01 2023-11-30 # 11月の全日付を5並列で更新"
+  echo "  $0 --fit-only 2023-10-01 2023-10-31    # バイタルデータのみ更新"
+  echo "  $0 --weather-only 2023-10-01 2023-10-31 # 天候データのみ更新"
   exit 1
 }
 
@@ -132,12 +132,13 @@ else
   echo "実行モード: Cloud Function"
 fi
 
-echo "処理対象:"
-if [ "$PROCESS_FIT" = true ]; then
-  echo "  - バイタルデータ (Google Fit)"
-fi
-if [ "$PROCESS_WEATHER" = true ]; then
-  echo "  - 天候データ"
+echo "更新対象:"
+if [ "$PROCESS_FIT" = true ] && [ "$PROCESS_WEATHER" = true ]; then
+  echo "  - バイタルデータ (Google Fit) と天候データ"
+elif [ "$PROCESS_FIT" = true ]; then
+  echo "  - バイタルデータ (Google Fit) のみ（天候データは既存のまま保持）"
+elif [ "$PROCESS_WEATHER" = true ]; then
+  echo "  - 天候データのみ（バイタルデータは既存のまま保持）"
 fi
 
 echo "処理を開始します..."
@@ -158,9 +159,11 @@ function process_batch {
 
   local fit_success=true
   local weather_success=true
+  local any_processed=false
 
   # バイタルデータ処理
   if [ "$PROCESS_FIT" = true ]; then
+    any_processed=true
     echo "  バイタルデータを処理中..."
     if ! bash "$PROJECT_ROOT/scripts/utils/trigger_fit.sh" "$date"; then
       echo "  エラー: バイタルデータの処理に失敗 ($date)"
@@ -168,10 +171,13 @@ function process_batch {
     else
       echo "  バイタルデータ処理完了 ($date)"
     fi
+  else
+    echo "  バイタルデータはスキップ（既存データを保持）"
   fi
 
   # 天候データ処理
   if [ "$PROCESS_WEATHER" = true ]; then
+    any_processed=true
     echo "  天候データを処理中..."
     if ! bash "$PROJECT_ROOT/scripts/utils/update_weather.sh" "$date"; then
       echo "  エラー: 天候データの処理に失敗 ($date)"
@@ -179,11 +185,25 @@ function process_batch {
     else
       echo "  天候データ処理完了 ($date)"
     fi
+  else
+    echo "  天候データはスキップ（既存データを保持）"
   fi
 
-  # 結果判定
-  if [ "$fit_success" = true ] && [ "$weather_success" = true ]; then
-    echo "  成功: $date の全データ処理完了"
+  # 結果判定（実際に処理したデータのみを対象）
+  local overall_success=true
+  if [ "$PROCESS_FIT" = true ] && [ "$fit_success" = false ]; then
+    overall_success=false
+  fi
+  if [ "$PROCESS_WEATHER" = true ] && [ "$weather_success" = false ]; then
+    overall_success=false
+  fi
+
+  if [ "$overall_success" = true ]; then
+    if [ "$any_processed" = true ]; then
+      echo "  成功: $date の指定データ処理完了"
+    else
+      echo "  スキップ: $date は処理対象外"
+    fi
     return 0
   else
     echo "  失敗: $date の処理でエラーが発生"
@@ -209,9 +229,11 @@ process_batch() {
 
   local fit_success=true
   local weather_success=true
+  local any_processed=false
 
   # バイタルデータ処理
   if [ "$PROCESS_FIT" = true ]; then
+    any_processed=true
     echo "  バイタルデータを処理中..."
     if ! bash "$PROJECT_ROOT/scripts/utils/trigger_fit.sh" "$date"; then
       echo "  エラー: バイタルデータの処理に失敗 ($date)"
@@ -219,10 +241,13 @@ process_batch() {
     else
       echo "  バイタルデータ処理完了 ($date)"
     fi
+  else
+    echo "  バイタルデータはスキップ（既存データを保持）"
   fi
 
   # 天候データ処理
   if [ "$PROCESS_WEATHER" = true ]; then
+    any_processed=true
     echo "  天候データを処理中..."
     if ! bash "$PROJECT_ROOT/scripts/utils/update_weather.sh" "$date"; then
       echo "  エラー: 天候データの処理に失敗 ($date)"
@@ -230,11 +255,25 @@ process_batch() {
     else
       echo "  天候データ処理完了 ($date)"
     fi
+  else
+    echo "  天候データはスキップ（既存データを保持）"
   fi
 
-  # 結果判定
-  if [ "$fit_success" = true ] && [ "$weather_success" = true ]; then
-    echo "  成功: $date の全データ処理完了"
+  # 結果判定（実際に処理したデータのみを対象）
+  local overall_success=true
+  if [ "$PROCESS_FIT" = true ] && [ "$fit_success" = false ]; then
+    overall_success=false
+  fi
+  if [ "$PROCESS_WEATHER" = true ] && [ "$weather_success" = false ]; then
+    overall_success=false
+  fi
+
+  if [ "$overall_success" = true ]; then
+    if [ "$any_processed" = true ]; then
+      echo "  成功: $date の指定データ処理完了"
+    else
+      echo "  スキップ: $date は処理対象外"
+    fi
     return 0
   else
     echo "  失敗: $date の処理でエラーが発生"
@@ -272,11 +311,11 @@ echo
 echo "すべての処理が完了しました。"
 echo "処理結果:"
 if [ "$PROCESS_FIT" = true ] && [ "$PROCESS_WEATHER" = true ]; then
-  echo "  - バイタルデータ・天候データの統合処理"
+  echo "  - バイタルデータ・天候データの統合更新"
 elif [ "$PROCESS_FIT" = true ]; then
-  echo "  - バイタルデータのみ処理"
+  echo "  - バイタルデータのみ更新（天候データは既存のまま保持）"
 elif [ "$PROCESS_WEATHER" = true ]; then
-  echo "  - 天候データのみ処理"
+  echo "  - 天候データのみ更新（バイタルデータは既存のまま保持）"
 fi
 echo "終了コード: $EXIT_CODE"
 exit $EXIT_CODE

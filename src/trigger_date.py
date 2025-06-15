@@ -26,24 +26,17 @@ def call_cloud_function(date_str):
     Args:
         date_str: YYYY-MM-DD形式の日付文字列
     """
-    # Cloud FunctionのURLとAPIキーを環境変数から取得
+    # Cloud FunctionのURLを環境変数から取得
     function_url = os.getenv("CLOUD_FUNCTION_URL")
-    api_key = os.getenv("WEBHOOK_API_KEY")
 
     if not function_url:
         print("エラー: 環境変数「CLOUD_FUNCTION_URL」が設定されていません")
-        print("例: export CLOUD_FUNCTION_URL=https://us-central1-your-project.cloudfunctions.net/webhook_handler")
-        return False
-
-    if not api_key:
-        print("エラー: 環境変数「WEBHOOK_API_KEY」が設定されていません")
-        print("例: export WEBHOOK_API_KEY=your-api-key")
+        print("例: export CLOUD_FUNCTION_URL=https://asia-northeast1-your-project.cloudfunctions.net/your-function-name")
         return False
 
     # リクエストヘッダーとボディの準備
     headers = {
-        "Content-Type": "application/json",
-        "X-API-Key": api_key
+        "Content-Type": "application/json"
     }
 
     # Cloud Functionsで処理する日付を指定

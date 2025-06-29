@@ -5,8 +5,8 @@ from datetime import datetime, timedelta
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from google.cloud import firestore
-from src.util import get_google_fit_data, update_notion_page
-from src.constants import OAUTH_SCOPE
+from util import get_google_fit_data, update_notion_page_with_date
+from constants import OAUTH_SCOPE
 
 # 環境変数の取得
 GCP_PROJECT = os.getenv("GCP_PROJECT")
@@ -18,14 +18,14 @@ def get_credentials():
         db = firestore.Client()
         doc_ref = db.collection(u'credentials').document(u'google_fit')
         doc = doc_ref.get()
-        
+
         if not doc.exists:
             print("Firestoreに認証情報が見つかりません。scripts/utils/auth.pyを実行してください。")
             return None
-        
+
         cred_dict = doc.to_dict()
         print("認証情報を取得しました")
-        
+
         credentials = Credentials(
             token=cred_dict['token'],
             refresh_token=cred_dict['refresh_token'],
@@ -34,7 +34,7 @@ def get_credentials():
             client_secret=cred_dict['client_secret'],
             scopes=cred_dict['scopes']
         )
-        
+
         # トークンが期限切れかどうかチェック
         if credentials.expired and credentials.refresh_token:
             print("トークンが期限切れです。更新中...")
@@ -42,9 +42,9 @@ def get_credentials():
             # 更新されたトークンをFirestoreに保存
             save_credentials_to_firestore(credentials)
             print("トークンを更新しました")
-        
+
         return credentials
-        
+
     except Exception as e:
         print(f"認証情報の取得中にエラーが発生しました: {str(e)}")
         return None
@@ -72,7 +72,7 @@ def process_data_for_date(target_date):
     """指定された日付のGoogle Fitデータを取得してNotionに記録する"""
     try:
         print(f"Processing data for date: {target_date}")
-        
+
         # 認証情報を取得
         credentials = get_credentials()
         if not credentials:
@@ -103,7 +103,7 @@ def process_data_for_date(target_date):
         print("Updating Notion properties:", json.dumps(properties, indent=2))
 
         # ページを更新
-        res = update_notion_page(database_id, properties, target_date)
+        res = update_notion_page_with_date(database_id, properties, target_date)
         print("Notion API response:", json.dumps(res, indent=2))
 
         return {
@@ -138,14 +138,14 @@ def handler(cloud_event):
     try:
         # Pub/Subメッセージからデータを取得
         import base64
-        
+
         if cloud_event.data and 'message' in cloud_event.data:
             message_data = cloud_event.data['message'].get('data', '')
             if message_data:
                 # Base64デコード
                 decoded_data = base64.b64decode(message_data).decode('utf-8')
                 print(f"Received message: {decoded_data}")
-                
+
                 # 日付文字列をパース
                 try:
                     target_date = datetime.strptime(decoded_data, "%Y-%m-%d").date()
@@ -159,10 +159,10 @@ def handler(cloud_event):
         else:
             print("No message in cloud event, processing yesterday's data")
             result = process_yesterday_data()
-        
+
         print("Processing result:", json.dumps(result, indent=2))
         return result
-        
+
     except Exception as e:
         print(f"Error in handler: {str(e)}")
         return {
@@ -179,11 +179,11 @@ def http_handler(request):
                 "status": "ok",
                 "message": "Health check passed"
             }
-        
+
         if request.method == 'POST':
             request_json = request.get_json()
             date_str = request_json.get('message', '') if request_json else ''
-            
+
             if date_str:
                 try:
                     target_date = datetime.strptime(date_str, "%Y-%m-%d").date()
@@ -192,14 +192,14 @@ def http_handler(request):
                     result = process_yesterday_data()
             else:
                 result = process_yesterday_data()
-            
+
             return result
-        
+
         return {
             "status": "error",
             "message": "Only GET and POST methods are allowed"
         }, 405
-        
+
     except Exception as e:
         print(f"Error in http_handler: {str(e)}")
         return {

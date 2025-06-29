@@ -205,19 +205,32 @@ def update_notion_database(weather_data, date_str):
             }
         )
 
-        # 「振り返り」プロパティがチェックされているか確認
+        # 複数のエントリーがある場合、「振り返り」チェックが入っていないエントリーを優先選択
+        target_page = None
         if query_result["results"]:
-            page = query_result["results"][0]
-            page_id = page["id"]
-
-            # ページの詳細情報を取得（すべてのプロパティを含む）
-            page_details = notion.pages.retrieve(page_id=page_id)
-
-            # 「振り返り」プロパティが存在し、チェックされているか確認
-            if "振り返り" in page_details["properties"] and page_details["properties"]["振り返り"].get("checkbox", False):
-                print(f"注意: {date_str} のエントリーは「振り返り」チェックが入っているため更新をスキップします。")
+            # 「振り返り」チェックが入っていないエントリーを探す
+            for page in query_result["results"]:
+                page_id = page["id"]
+                
+                # ページの詳細情報を取得（すべてのプロパティを含む）
+                page_details = notion.pages.retrieve(page_id=page_id)
+                
+                # 「振り返り」プロパティが存在し、チェックされているか確認
+                if "振り返り" in page_details["properties"]:
+                    is_reflection_checked = page_details["properties"]["振り返り"].get("checkbox", False)
+                    if not is_reflection_checked:  # チェックが入っていない場合
+                        target_page = page
+                        break
+                else:
+                    # 「振り返り」プロパティが存在しない場合も更新対象とする
+                    target_page = page
+                    break
+            
+            # 「振り返り」チェックが入っていないエントリーが見つからない場合
+            if target_page is None:
+                print(f"注意: {date_str} のすべてのエントリーで「振り返り」チェックが入っているため更新をスキップします。")
                 return True
-
+        
         # ページのプロパティを作成
         properties = {
             "日付": {
@@ -282,8 +295,8 @@ def update_notion_database(weather_data, date_str):
         }
 
         # 既存のページがある場合は更新、なければ新規作成
-        if query_result["results"]:
-            page_id = query_result["results"][0]["id"]
+        if target_page:
+            page_id = target_page["id"]
             notion.pages.update(page_id=page_id, properties=properties)
             print(f"Notionページを更新しました: {date_str}")
         else:

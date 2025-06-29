@@ -22,6 +22,7 @@ def convert_date_format(date_str, to_iso=True):
 def search_notion_page(database_id, date):
     """
     指定された日付のページをNotionデータベースから検索する
+    複数のエントリーがある場合、「振り返り」チェックが入っていないエントリーを優先的に返す
     """
     notion_secret = os.getenv("NOTION_SECRET")
     if not notion_secret:
@@ -53,7 +54,39 @@ def search_notion_page(database_id, date):
         print(f"Notion API error: {response.status_code} - {response.text}")
     response.raise_for_status()
     results = response.json().get("results", [])
-    return results[0] if results else None
+    
+    if not results:
+        return None
+    
+    # 複数のエントリーがある場合、「振り返り」チェックが入っていないエントリーを優先選択
+    for page in results:
+        page_id = page["id"]
+        
+        # ページの詳細情報を取得して「振り返り」プロパティを確認
+        try:
+            page_details_response = requests.get(
+                f"https://api.notion.com/v1/pages/{page_id}",
+                headers=headers
+            )
+            if page_details_response.ok:
+                page_details = page_details_response.json()
+                
+                # 「振り返り」プロパティが存在し、チェックされているか確認
+                if "振り返り" in page_details["properties"]:
+                    is_reflection_checked = page_details["properties"]["振り返り"].get("checkbox", False)
+                    if not is_reflection_checked:  # チェックが入っていない場合
+                        return page
+                else:
+                    # 「振り返り」プロパティが存在しない場合も優先対象とする
+                    return page
+        except Exception as e:
+            print(f"Warning: Failed to check reflection property for page {page_id}: {str(e)}")
+            # エラーが発生した場合はそのページを返す
+            return page
+    
+    # すべてのエントリーで「振り返り」チェックが入っている場合、最初のエントリーを返す
+    print(f"Warning: All entries for date {iso_date} have reflection checkbox checked.")
+    return results[0]
 
 def update_notion_page(page_id, properties):
     """
@@ -199,5 +232,26 @@ def get_google_fit_data(credentials, date):
         "latest_weight": latest_weight,
         "total_sleep_minutes": total_sleep_minutes
     }
+
+def update_notion_page_with_date(database_id, properties, target_date):
+    """
+    指定された日付のNotionページを検索し、「振り返り」チェックが入っていないエントリーを優先的に更新する
+    """
+    # 日付をISO形式に変換
+    formatted_date = target_date.strftime("%Y-%m-%d")
+    
+    # 既存のページを検索
+    page = search_notion_page(database_id, formatted_date)
+    
+    if page:
+        # 既存のページを更新
+        page_id = page["id"]
+        print(f"既存のページを更新します: {formatted_date}")
+        return update_notion_page(page_id, properties)
+    else:
+        # 新しいページを作成
+        title = f"Health Data - {formatted_date}"
+        print(f"新しいページを作成します: {formatted_date}")
+        return create_notion_page(database_id, title, properties)
 
 

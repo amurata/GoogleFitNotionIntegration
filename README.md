@@ -140,7 +140,7 @@ python scripts/utils/auth.py
 
 ### 6. 天候データのNotion連携
 ```bash
-./scripts/utils/update_weather.sh 2025-04-20
+./scripts/utils/update_weather.sh 2025-06-14 2025-06-21
 ```
 ```fish
 ./scripts/utils/update_weather.sh 2025-04-20

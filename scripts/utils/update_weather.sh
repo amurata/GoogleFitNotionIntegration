@@ -69,7 +69,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # コマンドの構築
-COMMAND="cd \"${WEATHER_DIR}\" && python update_weather.py"
+COMMAND="cd \"${WEATHER_DIR}\" && source \"${PROJECT_ROOT}/venv/bin/activate\" && python update_weather.py"
 
 if [[ -n "$START_DATE" ]]; then
     COMMAND="${COMMAND} ${START_DATE}"

@@ -5,6 +5,9 @@ from googleapiclient.discovery import build
 import time
 from constants import DATA_TYPES, ACTIVITY_TYPES
 import json
+from google.cloud import firestore
+from google.oauth2.credentials import Credentials
+from google.auth.transport.requests import Request
 
 def convert_date_format(date_str, to_iso=True):
     """
@@ -253,5 +256,86 @@ def update_notion_page_with_date(database_id, properties, target_date):
         title = f"Health Data - {formatted_date}"
         print(f"新しいページを作成します: {formatted_date}")
         return create_notion_page(database_id, title, properties)
+
+
+def get_credentials_from_firestore(collection_name='credentials', document_name='google_fit'):
+    """
+    Firestoreから認証情報を取得し、必要に応じて更新する
+    
+    Args:
+        collection_name: Firestoreのコレクション名
+        document_name: Firestoreのドキュメント名
+        
+    Returns:
+        Credentials: Google認証情報オブジェクト、または None
+    """
+    try:
+        print(f"Firestoreから認証情報を取得中... (collection: {collection_name}, doc: {document_name})")
+        db = firestore.Client()
+        doc_ref = db.collection(collection_name).document(document_name)
+        doc = doc_ref.get()
+
+        if not doc.exists:
+            print(f"Firestoreに認証情報が見つかりません。")
+            return None
+
+        cred_dict = doc.to_dict()
+        print("認証情報を取得しました")
+
+        # Credentialsオブジェクトを作成
+        credentials = Credentials(
+            token=cred_dict.get('token'),
+            refresh_token=cred_dict.get('refresh_token'),
+            token_uri=cred_dict.get('token_uri'),
+            client_id=cred_dict.get('client_id'),
+            client_secret=cred_dict.get('client_secret'),
+            scopes=cred_dict.get('scopes')
+        )
+
+        # トークンが期限切れかどうかチェック
+        if credentials.expired and credentials.refresh_token:
+            print("トークンが期限切れです。更新中...")
+            credentials.refresh(Request())
+            # 更新されたトークンをFirestoreに保存
+            save_credentials_to_firestore(credentials, collection_name, document_name)
+            print("トークンを更新しました")
+
+        return credentials
+
+    except Exception as e:
+        print(f"認証情報の取得中にエラーが発生しました: {str(e)}")
+        return None
+
+
+def save_credentials_to_firestore(credentials, collection_name='credentials', document_name='google_fit'):
+    """
+    認証情報をFirestoreに保存
+    
+    Args:
+        credentials: 保存する認証情報
+        collection_name: Firestoreのコレクション名
+        document_name: Firestoreのドキュメント名
+        
+    Returns:
+        bool: 保存の成否
+    """
+    try:
+        db = firestore.Client()
+        doc_ref = db.collection(collection_name).document(document_name)
+        cred_dict = {
+            'token': credentials.token,
+            'refresh_token': credentials.refresh_token,
+            'token_uri': credentials.token_uri,
+            'client_id': credentials.client_id,
+            'client_secret': credentials.client_secret,
+            'scopes': credentials.scopes,
+            'updated_at': firestore.SERVER_TIMESTAMP
+        }
+        doc_ref.set(cred_dict)
+        print(f"認証情報をFirestoreに保存しました (collection: {collection_name}, doc: {document_name})")
+        return True
+    except Exception as e:
+        print(f"Firestore保存中にエラーが発生しました: {str(e)}")
+        return False
 
 

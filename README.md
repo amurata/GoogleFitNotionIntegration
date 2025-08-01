@@ -80,9 +80,12 @@ Google Maps Platform Weather APIを使用して、指定された位置情報の
 │   ├── constants.py     # 定数定義
 │   ├── trigger_date.py  # 日付指定バッチトリガー
 │   ├── batch_process.sh # バッチ処理用シェル
-│   └── weather/
-│       ├── weather_notion.py # 天気データ取得・Notion更新
-│       ├── update_weather.py # 天気データ取得・保存
+│   ├── weather/
+│   │   ├── weather_notion.py # 天気データ取得・Notion更新
+│   │   ├── update_weather.py # 天気データ取得・保存
+│   │   └── __init__.py
+│   └── github/
+│       ├── github_notion.py # GitHub活動データ・Notion更新
 │       └── __init__.py
 ├── scripts/
 │   └── utils/
@@ -92,6 +95,7 @@ Google Maps Platform Weather APIを使用して、指定された位置情報の
 │       ├── deploy.sh   # Cloud Functionsデプロイ
 │       ├── trigger_fit.sh # PubSubトリガ
 │       ├── update_weather.sh # 天候データ更新
+│       ├── update_github.sh # GitHub活動データ更新
 │       └── setup.sh    # 初期セットアップ
 ├── docs/
 │   ├── architecture.png
@@ -147,7 +151,30 @@ python scripts/utils/auth.py
 ```
 - 日付省略で2日前分
 
-### 7. バッチ処理（例：複数日まとめて）
+### 7. GitHub活動データのNotion連携
+```bash
+./scripts/utils/update_github.sh 20250420
+```
+```fish
+./scripts/utils/update_github.sh 20250420
+```
+- 日付省略で昨日分
+- 日付形式はYYYYMMDD（ハイフンなし）
+
+### 8. 自動定期実行（GitHub Actions）
+毎日JST 24:30に前日のGitHub活動データを自動同期
+
+**セットアップ:**
+1. Repository Secretsの設定:
+   - `NOTION_SECRET`: Notion Integration トークン
+   - `DATABASE_ID`: Notion データベース ID
+2. 失敗時メール通知設定（GitHub Settings → Notifications）
+
+**手動実行:**
+- GitHub Actions タブから任意の日付を指定して実行可能
+- 詳細は `docs/GitHubActionsSetup.md` を参照
+
+### 9. バッチ処理（例：複数日まとめて）
 ```bash
 # バイタル・天候データを両方処理（デフォルト）
 bash src/batch_process.sh 2025-04-01 2025-04-10

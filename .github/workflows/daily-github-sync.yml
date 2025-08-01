@@ -1,0 +1,73 @@
+name: Daily GitHub Activity Sync
+
+on:
+  schedule:
+    # 毎日 JST 24:30 (UTC 15:30) に実行 - 前日分のGitHub活動を同期
+    - cron: '30 15 * * *'
+  
+  # 手動実行も可能
+  workflow_dispatch:
+    inputs:
+      date:
+        description: '処理対象日付 (YYYYMMDD形式、省略時は昨日)'
+        required: false
+        type: string
+
+jobs:
+  sync-github-activity:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: リポジトリをチェックアウト
+        uses: actions/checkout@v4
+
+      - name: Python環境のセットアップ
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: 依存関係のインストール
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: GitHub活動データの同期
+        env:
+          # GitHub Actionsが自動提供（全リポジトリアクセス権限付き）
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Secretsで設定が必要
+          NOTION_SECRET: ${{ secrets.NOTION_SECRET }}
+          DATABASE_ID: ${{ secrets.DATABASE_ID }}
+        run: |
+          # 処理対象日付の決定
+          if [ -n "${{ github.event.inputs.date }}" ]; then
+            # 手動実行時：指定された日付を使用
+            TARGET_DATE="${{ github.event.inputs.date }}"
+            echo "手動実行: 指定日付 $TARGET_DATE を処理します"
+          else
+            # 定期実行時：JST基準で昨日の日付を計算
+            # UTC 15:30 = JST 24:30なので、JST基準で前日を取得
+            TARGET_DATE=$(TZ='Asia/Tokyo' date -d 'yesterday' +'%Y%m%d')
+            echo "定期実行: JST基準で昨日 ($TARGET_DATE) を処理します"
+          fi
+          
+          # スクリプト実行
+          cd src/github
+          echo "GitHub活動データ同期を開始します..."
+          python github_notion.py $TARGET_DATE
+          
+          if [ $? -eq 0 ]; then
+            echo "✅ GitHub活動データの同期が正常に完了しました"
+          else
+            echo "❌ GitHub活動データの同期に失敗しました"
+            exit 1
+          fi
+
+      - name: 実行結果の通知
+        if: always()
+        run: |
+          if [ ${{ job.status }} == 'success' ]; then
+            echo "🎉 GitHub Activity Sync: 成功"
+          else
+            echo "💥 GitHub Activity Sync: 失敗 - 管理者に通知されます"
+          fi

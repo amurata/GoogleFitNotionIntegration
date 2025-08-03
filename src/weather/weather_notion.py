@@ -8,6 +8,22 @@ import json
 import os
 from notion_client import Client
 
+def load_env_file():
+    """
+    .envファイルから環境変数を読み込む（python-dotenvの代替）
+    """
+    env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), '.env')
+    if os.path.exists(env_path):
+        with open(env_path, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#') and '=' in line:
+                    key, value = line.split('=', 1)
+                    os.environ[key.strip()] = value.strip()
+
+# .envファイルを読み込み
+load_env_file()
+
 def get_weather_emoji(condition):
     """天気状態に応じた絵文字を返す"""
     condition = condition.lower()

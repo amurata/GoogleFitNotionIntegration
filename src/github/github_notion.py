@@ -127,13 +127,13 @@ class GitHubNotionSync:
             )
             resp.raise_for_status()
             repos = resp.json()
-            
+
             logger.info(f"取得したリポジトリ数: {len(repos)} (最新4個に制限、API効率化)")
             for repo in repos:
                 logger.info(f"  - {repo['full_name']} (updated: {repo['updated_at']})")
-            
+
             return repos
-            
+
         except Exception as e:
             logger.error(f"リポジトリ取得エラー: {e}")
             raise
@@ -233,7 +233,7 @@ class GitHubNotionSync:
         for repo in repos:
             owner = repo["owner"]["login"]
             name = repo["name"]
-            
+
             # リポジトリのPRを直接取得（Search APIの代替）
             try:
                 resp = requests.get(
@@ -248,16 +248,16 @@ class GitHubNotionSync:
                 )
                 resp.raise_for_status()
                 prs = resp.json()
-                
+
                 for pr in prs:
                     # マージされたPRのみ処理
                     if not pr.get("merged_at"):
                         continue
-                    
+
                     # merged_atをパースして時間範囲を確認
                     merged_at = pr["merged_at"]
                     merged_dt = datetime.datetime.fromisoformat(merged_at.rstrip("Z")).replace(tzinfo=datetime.timezone.utc)
-                    
+
                     if start_utc <= merged_dt <= end_utc:
                         results.append({
                             "type": "pr",
@@ -267,7 +267,7 @@ class GitHubNotionSync:
                             "url": pr["html_url"]
                         })
                         logger.info(f"  マッチしたPR: {owner}/{name}#{pr['number']} - {pr['title']}")
-                
+
             except Exception as e:
                 logger.warning(f"PR取得スキップ ({owner}/{name}): {e}")
                 # エラーでも処理を継続（プライベートリポジトリなど）
@@ -275,30 +275,30 @@ class GitHubNotionSync:
 
         logger.info(f"{date} のPR数: {len(results)}")
         return results
-    
+
     def fetch_direct_commits_for_date(self, date: datetime.date, repos: List[Dict], pr_commits: set) -> List[Dict]:
         """
         指定日（JST）のmainブランチへの直接コミットを取得（リポジトリごとに集計）
-        
+
         Args:
             date: 対象日付
             repos: リポジトリ一覧
             pr_commits: PRに含まれるコミットSHA集合（重複除外用）
-            
+
         Returns:
             リポジトリごとの集計情報リスト
         """
         # JST時間範囲をISO形式に変換
         start_jst = datetime.datetime.combine(date, datetime.time(0, 0), tzinfo=JST)
         end_jst = datetime.datetime.combine(date, datetime.time(23, 59, 59, 999999), tzinfo=JST)
-        
+
         results = []
-        
+
         for repo in repos:
             owner = repo["owner"]["login"]
             name = repo["name"]
             repo_key = f"{owner}/{name}"
-            
+
             try:
                 # mainブランチのコミットを取得
                 resp = requests.get(
@@ -313,23 +313,23 @@ class GitHubNotionSync:
                 )
                 resp.raise_for_status()
                 commits = resp.json()
-                
+
                 # このリポジトリの直接コミットを集計
                 total_additions = 0
                 total_deletions = 0
                 direct_commit_count = 0
-                
+
                 for commit in commits:
                     sha = commit["sha"]
-                    
+
                     # PRに含まれるコミットは除外
                     if sha in pr_commits:
                         continue
-                    
+
                     # マージコミットを除外（親が2つ以上）
                     if len(commit.get("parents", [])) > 1:
                         continue
-                    
+
                     # コミット詳細を取得して変更行数を確認
                     detail_resp = requests.get(
                         f"https://api.github.com/repos/{owner}/{name}/commits/{sha}",
@@ -337,12 +337,12 @@ class GitHubNotionSync:
                     )
                     detail_resp.raise_for_status()
                     detail = detail_resp.json()
-                    
+
                     stats = detail.get("stats", {})
                     total_additions += stats.get("additions", 0)
                     total_deletions += stats.get("deletions", 0)
                     direct_commit_count += 1
-                
+
                 # このリポジトリに直接コミットがあれば結果に追加
                 if direct_commit_count > 0:
                     results.append({
@@ -354,39 +354,39 @@ class GitHubNotionSync:
                         "url": f"https://github.com/{repo_key}/commits/{repo.get('default_branch', 'main')}"
                     })
                     logger.info(f"  {repo_key}: {direct_commit_count} commits, +{total_additions}-{total_deletions}")
-                    
+
             except Exception as e:
                 logger.warning(f"コミット取得スキップ ({owner}/{name}): {e}")
                 continue
-        
+
         logger.info(f"{date} の直接コミットがあるリポジトリ数: {len(results)}")
         return results
-    
+
     def get_pr_commit_shas(self, prs: List[Dict], repos: List[Dict]) -> set:
         """
         PRに含まれるコミットのSHAを収集
-        
+
         Args:
             prs: PR情報リスト
             repos: リポジトリ一覧
-            
+
         Returns:
             コミットSHAのセット
         """
         commit_shas = set()
-        
+
         # リポジトリ情報を辞書に変換（検索効率化）
         repo_dict = {f"{r['owner']['login']}/{r['name']}": r for r in repos}
-        
+
         for pr in prs:
             repo_key = pr["repo"]
             pr_number = pr["number"]
-            
+
             if repo_key not in repo_dict:
                 continue
-                
+
             owner, name = repo_key.split("/")
-            
+
             try:
                 # PRのコミット一覧を取得
                 resp = requests.get(
@@ -396,15 +396,15 @@ class GitHubNotionSync:
                 )
                 resp.raise_for_status()
                 commits = resp.json()
-                
+
                 # コミットSHAを収集
                 for commit in commits:
                     commit_shas.add(commit["sha"])
-                    
+
             except Exception as e:
                 logger.warning(f"PRコミット取得スキップ ({repo_key}#{pr_number}): {e}")
                 continue
-        
+
         logger.info(f"PR関連コミット数: {len(commit_shas)}")
         return commit_shas
 
@@ -431,26 +431,26 @@ class GitHubNotionSync:
                 lines.append(f"- 📝 変更行数:+{item['additions']}-{item['deletions']} ({item['commit_count']} commits) [{item['repo'].split('/')[1]}]({item['url']})")
 
         return "\n".join(lines)
-    
+
     def build_notion_rich_text(self, items: List[Dict]) -> List[Dict]:
         """
         GitHub活動データをNotionのrich_text形式に変換
-        
+
         Args:
             items: Issue/PR情報のリスト
-            
+
         Returns:
             Notionのrich_text配列
         """
         if not items:
             return [{"type": "text", "text": {"content": "該当なし"}}]
-        
+
         rich_text = []
-        
+
         for i, item in enumerate(items):
             # リポジトリ名を抽出（"owner/repo" -> "repo"）
             repo_name = item["repo"].split("/")[1]
-            
+
             # 全体のテキストを構築（リポジトリ名:Issue/PR #番号: タイトル）
             if item["type"] == "issue":
                 full_text = f"🎫 {repo_name}:Issue #{item['number']}: {item['title']}"
@@ -458,7 +458,7 @@ class GitHubNotionSync:
                 full_text = f"🔀 {repo_name}:PR #{item['number']}: {item['title']}"
             else:  # commit
                 full_text = f"📝 {repo_name}:変更行数:+{item['additions']}-{item['deletions']} ({item['commit_count']} commits)"
-            
+
             # 全体をリンク付きテキストとして追加
             rich_text.append({
                 "type": "text",
@@ -467,14 +467,14 @@ class GitHubNotionSync:
                     "link": {"url": item["url"]}
                 }
             })
-            
+
             # 最後のアイテム以外は改行を追加
             if i < len(items) - 1:
                 rich_text.append({
                     "type": "text",
                     "text": {"content": "\n"}
                 })
-        
+
         return rich_text
 
     def find_notion_page(self, date: datetime.date) -> Optional[Dict]:
@@ -567,13 +567,13 @@ class GitHubNotionSync:
             # GitHub活動データを取得
             issues = self.fetch_issues_for_date(date, repos)
             prs = self.fetch_prs_for_date(date, repos)
-            
+
             # PRに含まれるコミットSHAを収集（重複除外用）
             pr_commits = self.get_pr_commit_shas(prs, repos)
-            
+
             # 直接コミットを取得
             direct_commits = self.fetch_direct_commits_for_date(date, repos, pr_commits)
-            
+
             # 全アイテムを統合
             all_items = issues + prs + direct_commits
 

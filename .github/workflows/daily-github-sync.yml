@@ -4,7 +4,7 @@ on:
   schedule:
     # 毎日 JST 24:30 (UTC 15:30) に実行 - 前日分のGitHub活動を同期
     - cron: '30 15 * * *'
-  
+
   # 手動実行も可能
   workflow_dispatch:
     inputs:
@@ -16,7 +16,7 @@ on:
 jobs:
   sync-github-activity:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: リポジトリをチェックアウト
         uses: actions/checkout@v4
@@ -34,7 +34,7 @@ jobs:
       - name: GitHub活動データの同期
         env:
           # GitHub Actionsが自動提供（全リポジトリアクセス権限付き）
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
           # Secretsで設定が必要
           NOTION_SECRET: ${{ secrets.NOTION_SECRET }}
           DATABASE_ID: ${{ secrets.DATABASE_ID }}
@@ -50,12 +50,12 @@ jobs:
             TARGET_DATE=$(TZ='Asia/Tokyo' date -d 'yesterday' +'%Y%m%d')
             echo "定期実行: JST基準で昨日 ($TARGET_DATE) を処理します"
           fi
-          
+
           # スクリプト実行
           cd src/github
           echo "GitHub活動データ同期を開始します..."
           python github_notion.py $TARGET_DATE
-          
+
           if [ $? -eq 0 ]; then
             echo "✅ GitHub活動データの同期が正常に完了しました"
           else

@@ -55,6 +55,11 @@ class GitHubNotionSync:
         self.notion_token = os.getenv('NOTION_SECRET')
         self.database_id = os.getenv('DATABASE_ID')
         self.gcp_project = os.getenv('GCP_PROJECT')
+        
+        # 追跡するorganizationのリスト（カンマ区切り、オプション）
+        # 例: GITHUB_ORGS=org1,org2,org3
+        orgs_env = os.getenv('GITHUB_ORGS', '')
+        self.target_orgs = [org.strip() for org in orgs_env.split(',') if org.strip()] if orgs_env else None
 
         if not all([self.github_token, self.notion_token, self.database_id]):
             logger.error("必要な環境変数が設定されていません: GITHUB_TOKEN, NOTION_SECRET, DATABASE_ID")
@@ -108,31 +113,89 @@ class GitHubNotionSync:
 
     def get_owned_repos(self) -> List[Dict]:
         """
-        自分がオーナーのリポジトリ一覧を取得（最新4個のみ）
+        自分がオーナーのリポジトリとorganizationのリポジトリ一覧を取得（最新4個のみ）
+        
+        環境変数GITHUB_ORGSで特定のorganizationのみを指定可能
+        指定がない場合は、所属する全organizationのリポジトリを取得
 
         Returns:
             リポジトリ情報のリスト（更新日時順、最新4個）
         """
         try:
+            all_repos = []
+            
+            # 個人リポジトリを取得
             resp = requests.get(
                 "https://api.github.com/user/repos",
                 headers=self.github_headers,
                 params={
-                    "per_page": 4,  # 4個に制限（実際の活発なリポジトリ数に合わせて最適化）
+                    "per_page": 100,  # まず多めに取得
                     "page": 1,
                     "affiliation": "owner",
-                    "sort": "updated",  # 更新日時順
-                    "direction": "desc"  # 降順（最新が先）
+                    "sort": "updated",
+                    "direction": "desc"
                 }
             )
             resp.raise_for_status()
-            repos = resp.json()
+            personal_repos = resp.json()
+            all_repos.extend(personal_repos)
+            logger.info(f"個人リポジトリ数: {len(personal_repos)}")
+            
+            # organizationのリポジトリを取得
+            if self.target_orgs:
+                # 環境変数で指定されたorganizationのみ
+                orgs_to_fetch = self.target_orgs
+                logger.info(f"指定されたorganization: {', '.join(orgs_to_fetch)}")
+            else:
+                # ユーザーが所属する全organization
+                org_resp = requests.get(
+                    "https://api.github.com/user/orgs",
+                    headers=self.github_headers
+                )
+                org_resp.raise_for_status()
+                orgs_data = org_resp.json()
+                orgs_to_fetch = [org['login'] for org in orgs_data]
+                logger.info(f"所属するorganization: {', '.join(orgs_to_fetch) if orgs_to_fetch else 'なし'}")
+            
+            # 各organizationのリポジトリを取得
+            for org_name in orgs_to_fetch:
+                try:
+                    logger.info(f"Organization '{org_name}' のリポジトリを取得中...")
+                    
+                    org_repos_resp = requests.get(
+                        f"https://api.github.com/orgs/{org_name}/repos",
+                        headers=self.github_headers,
+                        params={
+                            "per_page": 100,
+                            "page": 1,
+                            "sort": "updated",
+                            "direction": "desc"
+                        }
+                    )
+                    org_repos_resp.raise_for_status()
+                    org_repos = org_repos_resp.json()
+                    all_repos.extend(org_repos)
+                    logger.info(f"  → {org_name}: {len(org_repos)}個のリポジトリ")
+                    
+                except requests.exceptions.HTTPError as e:
+                    if e.response.status_code == 404:
+                        logger.warning(f"Organization '{org_name}' が見つかりません（権限がない可能性があります）")
+                    else:
+                        logger.warning(f"Organization '{org_name}' のリポジトリ取得エラー: {e}")
+                except Exception as e:
+                    logger.warning(f"Organization '{org_name}' のリポジトリ取得エラー: {e}")
+            
+            # 更新日時でソートして最新4個を取得
+            all_repos.sort(key=lambda x: x['updated_at'], reverse=True)
+            selected_repos = all_repos[:4]
 
-            logger.info(f"取得したリポジトリ数: {len(repos)} (最新4個に制限、API効率化)")
-            for repo in repos:
-                logger.info(f"  - {repo['full_name']} (updated: {repo['updated_at']})")
+            logger.info(f"取得した総リポジトリ数: {len(all_repos)}")
+            logger.info(f"選択したリポジトリ数: {len(selected_repos)} (最新4個に制限、API効率化)")
+            for repo in selected_repos:
+                owner_type = "org" if repo['owner']['type'] == 'Organization' else "user"
+                logger.info(f"  - {repo['full_name']} ({owner_type}, updated: {repo['updated_at']})")
 
-            return repos
+            return selected_repos
 
         except Exception as e:
             logger.error(f"リポジトリ取得エラー: {e}")

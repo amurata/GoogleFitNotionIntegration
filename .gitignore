@@ -168,3 +168,6 @@ venv
 
 .idea/
 .DS_Store
+
+# Serena MCP
+.serena/

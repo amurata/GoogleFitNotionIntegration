@@ -15,19 +15,20 @@ description: Token-efficient Serena MCP command for structured app development a
 
 ## Options
 
-| Option | Description | Usage | Use Case |
-|--------|-------------|-------|----------|
-| `-q` | Quick mode (3-5 thoughts/steps) | `/serena "fix button" -q` | Simple bugs, minor features |
-| `-d` | Deep mode (10-15 thoughts/steps) | `/serena "architecture design" -d` | Complex systems, major decisions |
-| `-c` | Code-focused analysis | `/serena "optimize performance" -c` | Code review, refactoring |
-| `-s` | Step-by-step implementation | `/serena "build dashboard" -s` | Full feature development |
-| `-v` | Verbose output (show process) | `/serena "debug issue" -v` | Learning, understanding process |
-| `-r` | Include research phase | `/serena "choose framework" -r` | Technology decisions |
-| `-t` | Create implementation todos | `/serena "new feature" -t` | Project management |
+| Option | Description                      | Usage                               | Use Case                         |
+| ------ | -------------------------------- | ----------------------------------- | -------------------------------- |
+| `-q`   | Quick mode (3-5 thoughts/steps)  | `/serena "fix button" -q`           | Simple bugs, minor features      |
+| `-d`   | Deep mode (10-15 thoughts/steps) | `/serena "architecture design" -d`  | Complex systems, major decisions |
+| `-c`   | Code-focused analysis            | `/serena "optimize performance" -c` | Code review, refactoring         |
+| `-s`   | Step-by-step implementation      | `/serena "build dashboard" -s`      | Full feature development         |
+| `-v`   | Verbose output (show process)    | `/serena "debug issue" -v`          | Learning, understanding process  |
+| `-r`   | Include research phase           | `/serena "choose framework" -r`     | Technology decisions             |
+| `-t`   | Create implementation todos      | `/serena "new feature" -t`          | Project management               |
 
 ## Usage Patterns
 
 ### Basic Usage
+
 ```bash
 # Simple problem solving
 /serena "fix login bug"
@@ -40,6 +41,7 @@ description: Token-efficient Serena MCP command for structured app development a
 ```
 
 ### Advanced Usage
+
 ```bash
 # Complex system design with research
 /serena "design microservices architecture" -d -r -v
@@ -52,13 +54,16 @@ description: Token-efficient Serena MCP command for structured app development a
 ```
 
 ## Context (Auto-gathered)
+
 - Project files: !`find . -maxdepth 2 -name "package.json" -o -name "*.config.*" | head -5 2>/dev/null || echo "No config files"`
 - Git status: !`git status --porcelain 2>/dev/null | head -3 || echo "Not git repo"`
 
 ## Core Workflow
 
 ### 1. Problem Detection & Template Selection
+
 Automatically select thinking pattern based on keywords:
+
 - **Debug**: error, bug, issue, broken, failing → 5-8 thoughts
 - **Design**: architecture, system, structure, plan → 8-12 thoughts
 - **Implement**: build, create, add, feature → 6-10 thoughts
@@ -66,6 +71,7 @@ Automatically select thinking pattern based on keywords:
 - **Review**: analyze, check, evaluate → 4-7 thoughts
 
 ### 2. MCP Selection & Execution
+
 ```
 App Development Tasks → Serena MCP
 - Component implementation
@@ -82,6 +88,7 @@ All Tasks → Serena MCP
 ```
 
 ### 3. Output Modes
+
 - **Default**: Key insights + recommended actions
 - **Verbose (-v)**: Show thinking process
 - **Implementation (-s)**: Create todos + start execution
@@ -89,6 +96,7 @@ All Tasks → Serena MCP
 ## Problem-Specific Templates
 
 ### Debug Pattern (5-8 thoughts)
+
 1. Symptom analysis & reproduction
 2. Error context & environment check
 3. Root cause hypothesis generation
@@ -99,6 +107,7 @@ All Tasks → Serena MCP
 8. Prevention measures
 
 ### Design Pattern (8-12 thoughts)
+
 1. Requirements clarification
 2. Constraints & assumptions
 3. Stakeholder analysis
@@ -113,6 +122,7 @@ All Tasks → Serena MCP
 12. Documentation needs
 
 ### Implementation Pattern (6-10 thoughts)
+
 1. Feature specification & scope
 2. Technical approach selection
 3. Component/module design
@@ -125,6 +135,7 @@ All Tasks → Serena MCP
 10. Deployment & rollback plan
 
 ### Review/Optimize Pattern (4-7 thoughts)
+
 1. Current state analysis
 2. Bottleneck identification
 3. Improvement opportunities
@@ -136,16 +147,19 @@ All Tasks → Serena MCP
 ## Advanced Options
 
 **Thought Control:**
+
 - `--max-thoughts=N`: Override default thought count
 - `--focus=AREA`: Domain-specific analysis (frontend, backend, database, security)
 - `--token-budget=N`: Optimize for token limit
 
 **Integration:**
+
 - `-r`: Include Context7 research phase
 - `-t`: Create implementation todos
 - `--context=FILES`: Analyze specific files first
 
 **Output:**
+
 - `--summary`: Condensed output only
 - `--json`: Structured output for automation
 - `--progressive`: Show summary first, details on request
@@ -164,6 +178,7 @@ You are an expert app developer and problem-solver primarily using Serena MCP. F
 6. **Create implementation todos** if `-s` flag used
 
 **Key Guidelines:**
+
 - **Primary**: Use Serena MCP tools for all tasks (components, APIs, features, analysis)
 - **Leverage**: Serena's semantic code retrieval and editing capabilities
 - Start with problem analysis, end with concrete actions
@@ -172,6 +187,7 @@ You are an expert app developer and problem-solver primarily using Serena MCP. F
 - Consider security, performance, and maintainability
 
 **Token Efficiency Tips:**
+
 - Use `-q` for simple problems (saves ~40% tokens)
 - Use `--summary` for overview-only needs
 - Combine related problems in single session

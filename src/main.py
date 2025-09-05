@@ -7,6 +7,7 @@ from google.auth.transport.requests import Request
 from google.cloud import firestore
 from util import get_google_fit_data, update_notion_page_with_date
 from constants import OAUTH_SCOPE
+from activity_types import get_japanese_name
 
 # 環境変数の取得
 GCP_PROJECT = os.getenv("GCP_PROJECT")
@@ -88,17 +89,70 @@ def process_data_for_date(target_date):
         formatted_date = target_date.strftime("%Y-%m-%d")
         print("Formatted date:", formatted_date)
 
+        # アクティビティ詳細をテキスト形式に変換
+        activity_summary = fit_data.get('activity_summary', {})
+        activity_text = ""
+        if activity_summary:
+            activities = []
+            for activity, minutes in activity_summary.items():
+                if activity != 'Sleeping' and minutes > 0:  # 睡眠は別で記録、0分は除外
+                    # 英語名から日本語名に変換
+                    # ACTIVITY_TYPESを逆引きして、英語名からIDを見つける
+                    activity_id = None
+                    from activity_types import ACTIVITY_TYPES as ACTIVITY_TYPE_NAMES
+                    for type_id, names in ACTIVITY_TYPE_NAMES.items():
+                        if names["en"] == activity:
+                            activity_id = type_id
+                            break
+                    
+                    if activity_id is not None:
+                        activity_jp = ACTIVITY_TYPE_NAMES[activity_id]["ja"]
+                    else:
+                        # "Other (Type XX)" 形式の場合はそのまま表示
+                        activity_jp = activity
+                    
+                    activities.append(f"{activity_jp}{minutes}分")
+            activity_text = "、".join(activities) if activities else "なし"
+        
         properties = {
             "移動距離 (km)": {"number": fit_data["distance"]},
             "歩数 (歩)": {"number": fit_data["steps"]},
             "消費カロリー (kcal)": {"number": fit_data["calories"]},
-            "強めの運動 (分)": {"number": fit_data["active_minutes"]},
+            # Move Minutesは利用できない環境があるため、無効な場合は記録しない
+            # "アクティビティ時間 (分)": {"number": fit_data.get("move_minutes", 0)},
+            "運動強度スコア": {"number": fit_data["active_minutes"] if os.getenv("DISABLE_ACTIVE_MINUTES") != "true" else 0},
             "平均心拍数 (bpm)": {"number": fit_data["avg_heart_rate"]},
+            "最大心拍数 (bpm)": {"number": fit_data.get("max_heart_rate", 0)},
+            "安静時心拍数 (bpm)": {"number": fit_data.get("resting_heart_rate", 0)},
             "酸素飽和度 (%)": {"number": fit_data["avg_oxygen"]},
             "体重 (kg)": {"number": fit_data["latest_weight"] if fit_data["latest_weight"] > 0 else None},
+            "体脂肪率 (%)": {"number": fit_data.get("latest_body_fat", 0) if fit_data.get("latest_body_fat", 0) > 0 else None},
             "睡眠時間 (分)": {"number": fit_data["total_sleep_minutes"]},
+            "瞑想回数 (回)": {"number": fit_data.get("meditation_sessions", 0)},
+            "瞑想時間 (分)": {"number": fit_data.get("total_meditation_minutes", 0)},
+            "アクティビティ詳細": {"rich_text": [{"text": {"content": activity_text}}]},
             "日付": {"date": {"start": formatted_date}}
         }
+        
+        # Notionに追加されるデータをログ出力
+        print(f"Notion properties being updated for {formatted_date}:")
+        print(f"  基本指標:")
+        print(f"    - 歩数: {fit_data['steps']}歩, 距離: {fit_data['distance']}km")
+        print(f"    - カロリー: {fit_data['calories']}kcal")
+        print(f"  心拍数:")
+        print(f"    - 平均: {fit_data.get('avg_heart_rate', 0)}bpm")
+        print(f"    - 最大: {fit_data.get('max_heart_rate', 0)}bpm")
+        print(f"    - 安静時: {fit_data.get('resting_heart_rate', 0)}bpm")
+        print(f"  活動量:")
+        print(f"    - 運動強度スコア: {fit_data.get('active_minutes', 0)}pt（WHO基準のポイント）")
+        # Move Minutesは利用できない環境があるため除外
+        # print(f"    - アクティビティ時間: {fit_data.get('move_minutes', 0)}分（実際に動いていた時間）")
+        print(f"  身体指標:")
+        print(f"    - 体重: {fit_data.get('latest_weight', 0)}kg")
+        print(f"    - 体脂肪率: {fit_data.get('latest_body_fat', 0)}%")
+        print(f"  マインドフルネス:")
+        print(f"    - 瞑想: {fit_data.get('meditation_sessions', 0)}回, {fit_data.get('total_meditation_minutes', 0)}分")
+        print(f"  アクティビティ詳細: {activity_text}")
 
         print("Updating Notion properties:", json.dumps(properties, indent=2))
 

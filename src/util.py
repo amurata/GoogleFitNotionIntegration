@@ -4,6 +4,7 @@ from datetime import datetime, time as dt_time, timedelta
 from googleapiclient.discovery import build
 import time
 from constants import DATA_TYPES, ACTIVITY_TYPES
+from activity_types import get_english_name
 import json
 from google.cloud import firestore
 from google.oauth2.credentials import Credentials
@@ -176,16 +177,21 @@ def get_google_fit_data(credentials, date):
     end_time = datetime.combine(date, dt_time.max)
     start_unix_time_millis = int(time.mktime(start_time.timetuple()) * 1000)
     end_unix_time_millis = int(time.mktime(end_time.timetuple()) * 1000)
+    
+    # 変数初期化
+    resting_heart_rate = 0
+    latest_body_fat = 0
 
     activity_request_body = {
         "aggregateBy": [
             {"dataTypeName": DATA_TYPES["distance"]},
             {"dataTypeName": DATA_TYPES["steps"]},
             {"dataTypeName": DATA_TYPES["calories"]},
-            {"dataTypeName": DATA_TYPES["active_minutes"]},
+            {"dataTypeName": DATA_TYPES["active_minutes"]},  # Heart Points
             {"dataTypeName": DATA_TYPES["heart_rate"]},
             {"dataTypeName": DATA_TYPES["oxygen"]},
             {"dataTypeName": DATA_TYPES["weight"]},
+            {"dataTypeName": DATA_TYPES["body_fat"]},  # 体脂肪率
         ],
         "bucketByTime": {
             "durationMillis": end_unix_time_millis - start_unix_time_millis
@@ -200,16 +206,49 @@ def get_google_fit_data(credentials, date):
     distance = round(sum([point['value'][0]['fpVal'] for point in bucket.get("dataset")[0]['point']]) / 1000, 1)
     steps = sum([point['value'][0]['intVal'] for point in bucket.get("dataset")[1]['point']])
     calories = round(sum([point['value'][0]['fpVal'] for point in bucket.get("dataset")[2]['point']]), 1)
-    active_minutes = int(sum([point['value'][0]['fpVal'] for point in bucket.get("dataset")[3]['point']]))
-
+    # Heart Points を計算（活動強度の指標）
+    try:
+        heart_points_data = bucket.get("dataset")[3].get('point', [])
+        if heart_points_data:
+            active_minutes = int(sum([point['value'][0]['fpVal'] for point in heart_points_data]))
+            # デバッグログ（高強度活動の記録）
+            if active_minutes > 180:  # 3時間以上の活動をログ
+                print(f"High activity detected: {active_minutes} Heart Points - Great workout!")
+        else:
+            active_minutes = 0
+    except (KeyError, IndexError, TypeError) as e:
+        print(f"Warning: Failed to get Heart Points data: {e}")
+        active_minutes = 0
+    
+    # Move Minutes は利用できない場合があるため、代替値を使用
+    move_minutes = 0  # Move Minutesが利用できない環境のため0に設定
+    
     heart_rate_data = bucket.get("dataset")[4].get('point', [])
-    avg_heart_rate = round(sum([point['value'][0]['fpVal'] for point in heart_rate_data]) / len(heart_rate_data), 1) if heart_rate_data else 0
+    if heart_rate_data:
+        heart_rates = [point['value'][0]['fpVal'] for point in heart_rate_data]
+        avg_heart_rate = round(sum(heart_rates) / len(heart_rates), 1)
+        max_heart_rate = round(max(heart_rates), 1)
+        min_heart_rate = round(min(heart_rates), 1)
+        
+        # 安静時心拍数を推定（下位10%の心拍数の平均）
+        sorted_rates = sorted(heart_rates)
+        resting_count = max(1, len(sorted_rates) // 10)  # 最低1つは使用
+        resting_heart_rate = round(sum(sorted_rates[:resting_count]) / resting_count, 1)
+    else:
+        avg_heart_rate = max_heart_rate = min_heart_rate = resting_heart_rate = 0
 
     oxygen_data = bucket.get("dataset")[5].get('point', [])
     avg_oxygen = round(sum([point['value'][0]['fpVal'] for point in oxygen_data]) / len(oxygen_data), 1) if oxygen_data else 0
 
     weight_data = bucket.get("dataset")[6].get('point', [])
     latest_weight = round(weight_data[-1]['value'][0]['fpVal'], 1) if weight_data else 0
+    
+    # 体脂肪率データ
+    try:
+        body_fat_data = bucket.get("dataset")[7].get('point', [])
+        latest_body_fat = round(body_fat_data[-1]['value'][0]['fpVal'], 1) if body_fat_data else 0
+    except (KeyError, IndexError, TypeError):
+        latest_body_fat = 0  # 体脂肪率データが無い場合
 
     sleep_request = fitness_service.users().sessions().list(
         userId="me",
@@ -224,16 +263,83 @@ def get_google_fit_data(credentials, date):
             start = int(session['startTimeMillis'])
             end = int(session['endTimeMillis'])
             total_sleep_minutes += (end - start) // (1000 * 60)
+    
+    # マインドフルネス（瞑想）セッションを取得
+    meditation_request = fitness_service.users().sessions().list(
+        userId="me",
+        startTime=start_time.isoformat() + "Z",
+        endTime=end_time.isoformat() + "Z",
+        activityType=ACTIVITY_TYPES["meditation"]
+    ).execute()
+    
+    meditation_sessions = 0
+    total_meditation_minutes = 0
+    if 'session' in meditation_request:
+        meditation_sessions = len(meditation_request['session'])
+        for session in meditation_request['session']:
+            start = int(session['startTimeMillis'])
+            end = int(session['endTimeMillis'])
+            total_meditation_minutes += (end - start) // (1000 * 60)
+    
+    # 全アクティビティセッションを取得（重複除去付き）
+    all_sessions = fitness_service.users().sessions().list(
+        userId="me",
+        startTime=start_time.isoformat() + "Z",
+        endTime=end_time.isoformat() + "Z"
+    ).execute()
+    
+    activity_summary = {}
+    processed_times = []  # 重複チェック用
+    
+    if 'session' in all_sessions:
+        for session in all_sessions['session']:
+            activity_type = session.get('activityType', 0)
+            app_name = session.get('application', {}).get('name', 'Unknown')
+            start_ms = int(session['startTimeMillis'])
+            end_ms = int(session['endTimeMillis'])
+            duration_min = (end_ms - start_ms) // (1000 * 60)
+            
+            # 重複チェック（同じ時間帯のアクティビティはスキップ）
+            is_duplicate = False
+            for processed_start, processed_end in processed_times:
+                # 時間の重なりをチェック
+                if not (end_ms <= processed_start or start_ms >= processed_end):
+                    # 優先度: AutoSleep > AppleWatch > その他
+                    # 優先度: Strava > Nike Run Club > その他
+                    if ('AutoSleep' in app_name or 'Strava' in app_name):
+                        # 高優先度アプリのデータを保持
+                        continue
+                    else:
+                        is_duplicate = True
+                        break
+            
+            if not is_duplicate and duration_min > 0:
+                processed_times.append((start_ms, end_ms))
+                
+                # アクティビティタイプ名を取得（英語名で統一）
+                activity_name = get_english_name(activity_type)
+                
+                if activity_name not in activity_summary:
+                    activity_summary[activity_name] = 0
+                activity_summary[activity_name] += duration_min
 
     return {
         "distance": distance,
         "steps": steps,
         "calories": calories,
-        "active_minutes": active_minutes,
+        "active_minutes": active_minutes,  # Heart Points（活動強度）
+        "move_minutes": move_minutes,  # Move Minutes（実際の活動時間）
         "avg_heart_rate": avg_heart_rate,
+        "max_heart_rate": max_heart_rate,
+        "min_heart_rate": min_heart_rate,
+        "resting_heart_rate": resting_heart_rate,  # 安静時心拍数（疲労回復指標）
         "avg_oxygen": avg_oxygen,
         "latest_weight": latest_weight,
-        "total_sleep_minutes": total_sleep_minutes
+        "latest_body_fat": latest_body_fat,  # 体脂肪率
+        "total_sleep_minutes": total_sleep_minutes,
+        "meditation_sessions": meditation_sessions,
+        "total_meditation_minutes": total_meditation_minutes,
+        "activity_summary": activity_summary  # アクティビティ種類別時間
     }
 
 def update_notion_page_with_date(database_id, properties, target_date):

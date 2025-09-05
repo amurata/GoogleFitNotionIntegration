@@ -24,7 +24,7 @@ echo "Google Cloud Functionsへデプロイしています..."
 
 gcloud functions deploy GoogleFitNotionIntegration \
     --gen2 \
-    --runtime python39 \
+    --runtime python311 \
     --trigger-topic=fit \
     --region=asia-northeast1 \
     --entry-point=handler \

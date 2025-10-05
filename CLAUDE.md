@@ -4,7 +4,6 @@
 すべてのタスク・コマンド・ツール実行前に必ず読み込み
 - [基本ルール](./instructions/base.md) - 絶対厳守事項
 - [深層思考](./instructions/deep-think.md)
-- [memory](./instructions/memory.md)
 
 ## プロジェクト固有のアーキテクチャ・ルール・ドキュメント
 - [プロジェクトドキュメント索引](./docs/README.md)

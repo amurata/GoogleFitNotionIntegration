@@ -64,7 +64,7 @@ jobs:
           # スクリプト実行
           cd src/weather
           echo "天気データ同期を開始します..."
-          python update_weather.py "$START_DATE" "$END_DATE"
+          python update_weather.py "$START_DATE" "$END_DATE" --yes
 
           if [ $? -eq 0 ]; then
             echo "✅ 天気データの同期が正常に完了しました"

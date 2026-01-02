@@ -94,6 +94,7 @@ def main():
     parser.add_argument('end_date', nargs='?', help='終了日 YYYY-MM-DD形式（省略時は開始日と同じ）')
     parser.add_argument('--no-notion', action='store_true', help='Notionに保存しない（表示のみ）')
     parser.add_argument('--sleep', type=float, default=2.0, help='リクエスト間の待機秒数（デフォルト: 2.0秒）')
+    parser.add_argument('-y', '--yes', action='store_true', help='すべての確認プロンプトを自動承認')
     args = parser.parse_args()
 
     # 日付を処理
@@ -113,11 +114,14 @@ def main():
             if start_date == yesterday:
                 print(f"警告: 前日（{yesterday}）の天気データを指定しています。")
                 print("気象庁のウェブサイトでは前日のデータがまだ確定していない可能性があります。")
-                print("続行しますか？ [y/N]")
-                response = input().strip().lower()
-                if response != 'y':
-                    print("処理を中止しました。")
-                    return 0
+                if not args.yes:
+                    print("続行しますか？ [y/N]")
+                    response = input().strip().lower()
+                    if response != 'y':
+                        print("処理を中止しました。")
+                        return 0
+                else:
+                    print("--yes フラグが指定されているため、自動的に続行します。")
         except ValueError:
             print(f"エラー: '{args.start_date}' は有効な日付形式（YYYY-MM-DD）ではありません")
             return 1
@@ -147,11 +151,14 @@ def main():
         print(f"日付範囲 {start_date} から {end_date} までのデータを処理します")
         if (end_date - start_date).days > 30:
             print(f"警告: 処理する日数が多いです（{(end_date - start_date).days + 1}日間）")
-            print("続行しますか？ [y/N]")
-            response = input().strip().lower()
-            if response != 'y':
-                print("処理を中止しました。")
-                return 0
+            if not args.yes:
+                print("続行しますか？ [y/N]")
+                response = input().strip().lower()
+                if response != 'y':
+                    print("処理を中止しました。")
+                    return 0
+            else:
+                print("--yes フラグが指定されているため、自動的に続行します。")
 
     # 天気データを保存
     success = process_date_range(start_date, end_date, not args.no_notion, args.sleep)

@@ -2,8 +2,9 @@ name: Daily Weather Data Sync
 
 on:
   schedule:
-    # 毎日 JST 8:00 (UTC 23:00前日) に実行 - 前日と前々日の天気を同期
-    - cron: '0 23 * * *'
+    # 毎日 JST 15:00 (UTC 6:00) に実行 - 前日と前々日の天気を同期
+    # 注: JST 8:00では気象庁サイトの前日天気概況データが未公開のため、午後に変更
+    - cron: '0 6 * * *'
 
   # 手動実行も可能
   workflow_dispatch:
@@ -55,7 +56,7 @@ jobs:
             fi
           else
             # 定期実行時：JST基準で前日と前々日の日付を計算
-            # UTC 23:00 = JST 8:00 (翌日) なので、JST基準で前日・前々日を取得
+            # UTC 6:00 = JST 15:00 なので、JST基準で前日・前々日を取得
             START_DATE=$(TZ='Asia/Tokyo' date -d '2 days ago' +'%Y-%m-%d')
             END_DATE=$(TZ='Asia/Tokyo' date -d 'yesterday' +'%Y-%m-%d')
             echo "定期実行: JST基準で前々日 ($START_DATE) から前日 ($END_DATE) までを処理します"

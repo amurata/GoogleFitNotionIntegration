@@ -46,7 +46,15 @@ def get_weather_data(year=2025, month=5, day=15):
     url = f'https://www.data.jma.go.jp/stats/etrn/view/hourly_s1.php?prec_no=44&block_no=47662&year={year}&month={month:02d}&day={day:02d}&view=p1'
     r = requests.get(url)
     soup = BeautifulSoup(r.text, 'html.parser')
-    rows = soup.find('table', class_='data2_s').find_all('tr')
+    table = soup.find('table', class_='data2_s')
+    if table is None:
+        print(f"警告: {year}年{month}月{day}日 のデータテーブルが見つかりません（データ未公開の可能性）")
+        return {
+            "日付": f"{year}年{month}月{day}日",
+            "天気": "", "気温": "", "湿度": "", "降水量": "", "気圧": "", "日照時間": "",
+            "_is_complete": False,
+        }
+    rows = table.find_all('tr')
 
     # 結果格納用の変数を初期化
     weather_info = []
@@ -189,6 +197,10 @@ def get_weather_data(year=2025, month=5, day=15):
         "気圧": pressure_str,
         "日照時間": f"{total_sunshine:.1f}時間"
     }
+
+    # データの完全性を示すフラグを追加
+    # 天気情報（imgのalt属性）が空の場合はデータ未公開と判断
+    result["_is_complete"] = len(weather_info) > 0
 
     return result
 

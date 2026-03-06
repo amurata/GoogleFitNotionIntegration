@@ -40,7 +40,14 @@ def save_weather_data(date_obj, update_notion=True):
         # データを表示
         print("\n取得した天気データ:")
         for key, value in weather_data.items():
-            print(f"  {key}: {value}")
+            if not key.startswith("_"):
+                print(f"  {key}: {value}")
+
+        # データの完全性を検証
+        if not weather_data.get("_is_complete", False):
+            print(f"\n警告: {year}年{month}月{day}日 の天気概況データが未公開です（気象庁サイトにまだ反映されていない可能性があります）")
+            print("Notionへの保存をスキップします（不完全なデータで上書きするのを防止）")
+            return False
 
         # Notionに保存
         if update_notion:

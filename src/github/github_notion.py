@@ -62,8 +62,13 @@ class GitHubNotionSync:
         self.target_orgs = [org.strip() for org in orgs_env.split(',') if org.strip()] if orgs_env else None
 
         if not all([self.github_token, self.notion_token, self.database_id]):
-            logger.error("必要な環境変数が設定されていません: GITHUB_TOKEN, NOTION_SECRET, DATABASE_ID")
+            logger.error("必要な環境変数が設定されていません:")
+            logger.error(f"  GITHUB_TOKEN: {'設定済み' if self.github_token else '未設定'}")
+            logger.error(f"  NOTION_SECRET: {'設定済み' if self.notion_token else '未設定'}")
+            logger.error(f"  DATABASE_ID: {'設定済み' if self.database_id else '未設定'}")
             sys.exit(1)
+
+        logger.info("環境変数チェック: GITHUB_TOKEN=設定済み, NOTION_SECRET=設定済み, DATABASE_ID=設定済み")
 
         # GitHubのAPIヘッダー
         self.github_headers = {
@@ -77,6 +82,19 @@ class GitHubNotionSync:
             "Notion-Version": "2022-06-28",
             "Content-Type": "application/json"
         }
+
+        # GitHubトークンの有効性を確認
+        try:
+            resp = requests.get("https://api.github.com/user", headers=self.github_headers)
+            if resp.ok:
+                user_data = resp.json()
+                logger.info(f"GitHub認証OK: ユーザー={user_data.get('login')}")
+            else:
+                logger.error(f"GitHub認証エラー: {resp.status_code} - GITHUB_TOKENが無効または期限切れの可能性があります")
+                sys.exit(1)
+        except Exception as e:
+            logger.error(f"GitHub API接続エラー: {e}")
+            sys.exit(1)
 
     def parse_date_range(self, arg: str) -> List[datetime.date]:
         """
@@ -582,11 +600,14 @@ class GitHubNotionSync:
         }
 
         try:
+            logger.info(f"Notion検索: database_id={self.database_id}, date={formatted_date}")
             resp = requests.post(
                 f"https://api.notion.com/v1/databases/{self.database_id}/query",
                 headers=self.notion_headers,
                 json=payload
             )
+            if not resp.ok:
+                logger.error(f"Notion API検索エラー: {resp.status_code} - {resp.text}")
             resp.raise_for_status()
             results = resp.json().get("results", [])
 
@@ -594,6 +615,7 @@ class GitHubNotionSync:
                 logger.warning(f"{formatted_date} に対応するNotionページが見つかりません")
                 return None
 
+            logger.info(f"Notionページ発見: page_id={results[0]['id']}")
             return results[0]
 
         except Exception as e:
@@ -625,6 +647,8 @@ class GitHubNotionSync:
                 headers=self.notion_headers,
                 json=payload
             )
+            if not resp.ok:
+                logger.error(f"Notion API更新エラー: {resp.status_code} - {resp.text}")
             resp.raise_for_status()
             return resp.json()
 
@@ -645,45 +669,53 @@ class GitHubNotionSync:
         try:
             logger.info(f"処理開始: {date}")
 
-            # リポジトリ一覧を1回だけ取得（API効率化）
+            # ステップ1: リポジトリ一覧を取得
+            logger.info("[Step 1/6] リポジトリ一覧を取得中...")
             repos = self.get_owned_repos()
+            if not repos:
+                logger.error("リポジトリが1つも取得できませんでした。GITHUB_TOKENの権限を確認してください。")
+                return False
 
-            # GitHub活動データを取得
+            # ステップ2: GitHub活動データを取得
+            logger.info("[Step 2/6] Issue・PR・コミットデータを取得中...")
             issues = self.fetch_issues_for_date(date, repos)
             prs = self.fetch_prs_for_date(date, repos)
 
-            # PRに含まれるコミットSHAを収集（重複除外用）
+            # PRに含まれるコミ��トSHAを収集（重複除外用）
             pr_commits = self.get_pr_commit_shas(prs, repos)
 
-            # 直接コミットを取得
+            # ���接コミットを取得
             direct_commits = self.fetch_direct_commits_for_date(date, repos, pr_commits)
 
-            # 全アイテムを統合
+            # ステップ3: データ統合
             all_items = issues + prs + direct_commits
+            logger.info(f"[Step 3/6] 取得結果: Issues={len(issues)}, PRs={len(prs)}, DirectCommits={len(direct_commits)}")
 
             # ログ用のMarkdown形式に整形
             markdown = self.build_markdown(all_items)
             logger.info(f"生成されたMarkdown:\n{markdown}")
 
-            # Notion用のrich_text形式に変換
+            # ステップ4: Notion用データ変換
             rich_text = self.build_notion_rich_text(all_items)
-            logger.info(f"Notionリッチテキスト要素数: {len(rich_text)}")
+            logger.info(f"[Step 4/6] Notionリッチテキスト要素数: {len(rich_text)}")
 
-            # Notionページを検索
+            # ステップ5: Notionページを検索
+            logger.info("[Step 5/6] Notionページを検索中...")
             page = self.find_notion_page(date)
             if not page:
-                logger.warning(f"{date} のNotionページが見つからないためスキップします")
+                logger.error(f"{date} のNotionページが見つかりません。ページが作成済みか、DATABASE_IDが正しいか確認してください。")
                 return False
 
-            # Notionページを更新（リッチテキスト形式で）
+            # ステップ6: Notionページを更新
             page_id = page["id"]
+            logger.info(f"[Step 6/6] Notionページを更新中... (page_id={page_id})")
             self.update_notion_page(page_id, rich_text)
-            logger.info(f"✅ {date} の同期が完了しました（リンク付きフォーマットで更新）")
+            logger.info(f"✅ {date} の��期が完了しました（リンク付きフォーマットで更新）")
 
             return True
 
         except Exception as e:
-            logger.error(f"❌ {date} の処理中にエラーが発生しました: {e}")
+            logger.error(f"❌ {date} の処理中にエラーが��生しました: {e}", exc_info=True)
             return False
 
     def run(self, date_arg: str):

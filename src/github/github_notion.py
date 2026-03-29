@@ -268,8 +268,8 @@ class GitHubNotionSync:
 
                 except Exception as e:
                     logger.warning(f"Issue取得スキップ ({owner}/{name}): {e}")
-                    # エラーでも処理を継続（プライベートリポジトリなど）
-                    continue
+                    # エラー時はこのリポジトリをスキップして次へ
+                    break
 
         logger.info(f"{date} のIssue数: {len(items)}")
         return items
@@ -296,45 +296,66 @@ class GitHubNotionSync:
         for repo in repos:
             owner = repo["owner"]["login"]
             name = repo["name"]
+            page = 1
 
             # リポジトリのPRを直接取得（Search APIの代替）
-            try:
-                resp = requests.get(
-                    f"https://api.github.com/repos/{owner}/{name}/pulls",
-                    headers=self.github_headers,
-                    params={
-                        "state": "closed",
-                        "per_page": 50,  # 各リポジトリ最大9550個
-                        "sort": "updated",
-                        "direction": "desc"
-                    }
-                )
-                resp.raise_for_status()
-                prs = resp.json()
+            while True:
+                try:
+                    resp = requests.get(
+                        f"https://api.github.com/repos/{owner}/{name}/pulls",
+                        headers=self.github_headers,
+                        params={
+                            "state": "closed",
+                            "per_page": 50,
+                            "page": page,
+                            "sort": "updated",
+                            "direction": "desc"
+                        }
+                    )
+                    resp.raise_for_status()
+                    prs = resp.json()
 
-                for pr in prs:
-                    # マージされたPRのみ処理
-                    if not pr.get("merged_at"):
-                        continue
+                    if not prs:
+                        break
 
-                    # merged_atをパースして時間範囲を確認
-                    merged_at = pr["merged_at"]
-                    merged_dt = datetime.datetime.fromisoformat(merged_at.rstrip("Z")).replace(tzinfo=datetime.timezone.utc)
+                    found_older = False
+                    for pr in prs:
+                        # updated_atが対象期間より古い場合、以降のページは不要
+                        updated_at = pr.get("updated_at", "")
+                        if updated_at:
+                            updated_dt = datetime.datetime.fromisoformat(updated_at.rstrip("Z")).replace(tzinfo=datetime.timezone.utc)
+                            if updated_dt < start_utc:
+                                found_older = True
+                                break
 
-                    if start_utc <= merged_dt <= end_utc:
-                        results.append({
-                            "type": "pr",
-                            "repo": f"{owner}/{name}",
-                            "number": pr["number"],
-                            "title": pr["title"],
-                            "url": pr["html_url"]
-                        })
-                        logger.info(f"  マッチしたPR: {owner}/{name}#{pr['number']} - {pr['title']}")
+                        # マージされたPRのみ処理
+                        if not pr.get("merged_at"):
+                            continue
 
-            except Exception as e:
-                logger.warning(f"PR取得スキップ ({owner}/{name}): {e}")
-                # エラーでも処理を継続（プライベートリポジトリなど）
-                continue
+                        # merged_atをパースして時間範囲を確認
+                        merged_at = pr["merged_at"]
+                        merged_dt = datetime.datetime.fromisoformat(merged_at.rstrip("Z")).replace(tzinfo=datetime.timezone.utc)
+
+                        if start_utc <= merged_dt <= end_utc:
+                            results.append({
+                                "type": "pr",
+                                "repo": f"{owner}/{name}",
+                                "number": pr["number"],
+                                "title": pr["title"],
+                                "url": pr["html_url"]
+                            })
+                            logger.info(f"  マッチしたPR: {owner}/{name}#{pr['number']} - {pr['title']}")
+
+                    # 対象期間より古いPRに到達したらページネーション終了
+                    if found_older:
+                        break
+
+                    page += 1
+
+                except Exception as e:
+                    logger.warning(f"PR取得スキップ ({owner}/{name}): {e}")
+                    # エラー時はこのリポジトリをスキップして次へ
+                    break
 
         logger.info(f"{date} のPR数: {len(results)}")
         return results

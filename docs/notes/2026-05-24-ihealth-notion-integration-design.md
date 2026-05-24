@@ -45,45 +45,45 @@
 3. ローカル launchd 依存を解消（または役割を明確に分離）。
 4. GoogleFit リポの「Actions + `requests` で Notion プロパティ更新」パターンを踏襲。
 
-## 3. 最重要の決定ポイント（要確認）
+## 3. 決定済み: iHealth 取得はローカル専用
 
-**iHealth のデータをクラウド（GitHub Actions ランナー）から取得できるか？**
+**確定（2026-05-24）: iHealth のデータ取得はローカル専用**（launchd / Mac 上でのみ可能）。
+クラウド（GitHub Actions ランナー）から iHealth を直接叩くことはできない。
 
-ihealth-relay が iHealth の**クラウド API**（REST/OAuth）からデータを引いているなら、
-同じ認証情報を Actions secrets に置けばクラウドで完結できる（→ 案A）。
-ローカルでしか取得できない（端末ペアリング/ローカルエクスポート依存）場合は、
-健康取得はローカルに残す必要がある（→ 案B）。
+これにより、当初検討した「クラウド完全集約（健康も Actions 化）」案は**不採用**。
+健康取得はローカル launchd に残し、天気・GitHub はクラウド Actions で動かす
+**混在実行のモノレポ**を採用する（次節）。重い Google Fit/GCP パイプラインは廃止し、
+健康データ源は iHealth に一本化して重複を解消する。
 
-### 案A: クラウド完全集約（推奨・iHealth がクラウド取得可能な場合）
-- 新リポが Actions で iHealth API → Notion を実行。launchd 廃止。Google Fit 廃止。
-- 単一リポ・単一実行基盤。重複も二重実行もなくなる。
+## 4. 採用アーキテクチャ（混在実行モノレポ）
 
-### 案B: 健康はローカル維持 + 新リポは天気/GitHub（iHealth がローカル専用の場合）
-- ihealth-relay（launchd）が健康 → Notion を継続。
-- 新リポは天気 + GitHub を Actions で担当（Google Fit 健康分は廃止）。
-- もしくは ihealth-relay が SQLite 等を**クラウド到達可能な場所**（例: 同 Notion DB、
-  Google Sheets、クラウド DB）に書き、新リポがそれを読む案も可。
-
-→ **要確認#1: ihealth-relay の iHealth 取得はクラウド API か、ローカル専用か。**
-
-## 4. 推奨アーキテクチャ（案A 前提）
+健康はローカル launchd、天気・GitHub はクラウド Actions。実行基盤は分かれるが、
+コードと設定は 1 つの private リポに集約し、共通の Notion 書き込み層を共有する。
 
 ```
-GitHub Actions (cron, JST)            Notion DB（既存・日次ページ）
-┌─────────────────────────┐          ┌──────────────────────┐
-│ daily-health-sync.yml    │ iHealth  │ 日付 でページ検索       │
-│   └ health/ihealth_notion├─API────► │   → 体重/心拍/SpO2/    │
-│ daily-weather-sync.yml   │          │     睡眠/歩数… を PATCH │
-│   └ weather/...          │ 気象庁   │   → 天気… を PATCH      │
-│ daily-github-sync.yml    │ GitHub   │   → Github を PATCH     │
-│   └ github/github_notion │ API      └──────────────────────┘
-└─────────────────────────┘
+[ローカル / Mac launchd]                Notion DB（既存・日次ページ）
+┌─────────────────────────┐ iHealth   ┌──────────────────────┐
+│ health/ihealth_notion.py ├─(local)─► │ 日付 でページ検索       │
+└─────────────────────────┘           │   → 体重/心拍/SpO2/    │
+                                       │     睡眠… を PATCH      │
+[クラウド / GitHub Actions cron]        │                        │
+┌─────────────────────────┐ 気象庁    │   → 天気… を PATCH      │
+│ daily-weather-sync.yml   ├─────────► │                        │
+│ daily-github-sync.yml    │ GitHub    │   → Github を PATCH     │
+└─────────────────────────┘ API       └──────────────────────┘
+        共通: src/notion_client.py（日付検索 + プロパティ PATCH）を全系統で共有
 ```
 
-- 各系統は独立スクリプト + 独立ワークフロー（現リポの github/weather をそのまま移植）。
-- 健康だけ新規 `health/ihealth_notion.py` を起こす（ihealth-relay のロジックを移植/再実装）。
-- 共通の Notion クライアント util（`日付` 検索 + プロパティ PATCH）を 1 本に切り出すと
-  3 系統で共有でき、重複コードが減る。
+- weather / github: 現リポの実装をそのまま移植 + Actions ワークフロー移植。
+- health: `health/ihealth_notion.py` を新規。**launchd で定期実行**（plist 雛形を同梱）。
+  iHealth 取得部は ihealth-relay のロジックを移植（このセッションからは
+  ihealth-relay を読めないため、実装はスケルトン + TODO とし、ローカルで肉付け）。
+- 共通 `notion_client.py`（`日付` 検索 + プロパティ PATCH）を 1 本化し重複削減。
+- Google Fit/GCP（Firestore/PubSub/OAuth）パイプラインは廃止。
+
+### 別案（参考）: 2 リポ構成
+新リポは天気・GitHub（Actions）のみとし、健康は ihealth-relay を据え置く形も可。
+統合度は下がるが移行が最小。→ 要確認#5 で選択。
 
 ## 5. リポ構成（案）
 
@@ -129,24 +129,26 @@ ihealth-notion-integration/        # 新 private リポ
 - `GH_PAT`（GitHub 同期用）
 - iHealth 認証情報（案A の場合。client id/secret/refresh token 等。**要確認#3**）
 
-## 8. 移行・カットオーバー手順（案A）
+## 8. 移行・カットオーバー手順（モノレポ案）
 
 1. 新 private リポ作成（ユーザーが実施）。本設計の `src/` を配置。
 2. weather / github を現リポからコピーし、共通 `notion_client.py` にリファクタ。
-3. `health/ihealth_notion.py` を実装（ihealth-relay のロジック移植）。
-4. Actions secrets 設定 → `workflow_dispatch` で過去日を手動実行し検証。
+3. `health/ihealth_notion.py` を実装（ihealth-relay の iHealth 取得ロジックを
+   ローカルで移植）。launchd plist を設定。
+4. weather/github: Actions secrets 設定 → `workflow_dispatch` で過去日を手動実行し検証。
+   health: launchd でローカル実行し検証。
 5. 健康プロパティが iHealth 由来で正しく入ることを確認。
 6. **Google Fit パイプライン停止**（GCP Cloud Functions / スケジューラ無効化）。
-7. ihealth-relay の launchd を停止（案A）または役割整理（案B）。
+7. 旧 ihealth-relay は新リポへ移植後に停止（モノレポ案）／2 リポ案なら据え置き。
 8. 現リポ（GoogleFitNotionIntegration）は weather/github を新リポへ移したらアーカイブ検討。
 
 ## 9. 未確定事項（実装着手前に確定したい）
 
-- **#1** iHealth 取得はクラウド API か／ローカル専用か（案A/B の分岐）。
-- **#2** iHealth で取れる項目の正確な範囲。
-- **#3** iHealth 認証方式（Actions secrets に置ける形か）。
+- ~~**#1** iHealth 取得はクラウド API か／ローカル専用か~~ → **確定: ローカル専用**。
+- **#2** iHealth で取れる項目の正確な範囲（体重/心拍/SpO2/睡眠以外に歩数・距離・カロリーは？）。
 - **#4** Google Fit パイプラインは完全廃止でよいか（段階移行の要否）。
-- **#5** ihealth-relay は廃止か併存か（public→private への移設可否含む）。
+- **#5** 構成の選択: モノレポ統合（health を private リポへ移植）か、2 リポ構成
+  （ihealth-relay 据え置き + 新リポは天気/GitHub のみ）か。
 - **#6** 新リポ名・配置（例: `ihealth-notion-integration`）。
 
 ## 10. このセッションでの進め方

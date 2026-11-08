@@ -171,3 +171,6 @@ venv
 
 # Serena MCP
 .serena/
+
+# Claude Code の個人設定（承認したコマンドがそのまま保存されるため追跡しない）
+.claude/settings.local.json
